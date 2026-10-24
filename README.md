@@ -19,5 +19,4 @@ The website has no build step: Vercel serves the files as they are. `config.js` 
 
 ## Known gaps
 
-- `logo.webp` must be added to the repository (download it from the live site).
 - `feedback.html` (the chauffeur feedback form behind the Feedback QR button) was not found in the recovered files.
