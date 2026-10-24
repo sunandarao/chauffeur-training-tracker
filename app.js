@@ -973,7 +973,7 @@
       <section class="panel" id="bulk-panel">
         <div class="panel-head"><h2>Bulk upload (Excel or CSV)</h2><p class="muted">Many sessions in one file: each row = one chauffeur in one session</p></div>
         <div class="actions"><button class="btn btn-primary btn-sm" id="b-pick" type="button">Choose file</button><input type="file" id="b-file" accept=".xlsx,.xls,.csv" hidden><button class="btn btn-sm btn-ghost" id="b-template" type="button">Download template</button>
-          <span class="muted">Columns: Date, Chauffeur Code, Module, L&amp;D${me.role === 'trainer' ? ' (ignored: your name is used)' : ''}, Remarks, Q1–Q8 (optional)</span></div>
+          <span class="muted">Columns: Date, Chauffeur Code, Module, L&amp;D${me.role === 'trainer' ? ' (ignored: your name is used)' : ''}, Remarks, Q1–Q7 (optional), Chauffeur Name (only for codes not in master)</span></div>
         <div id="b-out"></div>
       </section>
       ${M.pending.length ? `<section class="panel" id="pend-panel"><div class="panel-head"><h2>Not in master <span class="pill warn">${M.pending.length}</span></h2><p class="muted">Not counted until the chauffeur is added to the master${me.role === 'admin' ? ' (Admin → Add or edit a chauffeur, or the weekly master)' : ' – ask the admin to add them'}; they then move into the counts automatically.</p></div>
@@ -1176,7 +1176,9 @@
         const q = []; Object.keys(qc).forEach(k => { const v = Number(r[qc[k]]); q[k] = v >= 1 && v <= 5 && Math.round(v) === v ? v : ''; });
         const key = [date, mod, tr, rem].join('|');
         if (!groups.has(key)) groups.set(key, { date, module: mod, trainer: tr, remarks: rem, entries: [] });
-        groups.get(key).entries.push({ code, q, name: C.name >= 0 ? String(r[C.name] || '').trim() : '' });
+        // a bare number in the name column is a stray rating, not a name
+        const nm = C.name >= 0 ? String(r[C.name] || '').trim() : '';
+        groups.get(key).entries.push({ code, q, name: /^[\d.\s]*$/.test(nm) ? '' : nm });
         if (isNew) newRows++; else okRows++;
       });
       const list = Array.from(groups.values()).sort((a, b) => a.date.localeCompare(b.date));
