@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-04-checks';
+var CODE_VERSION = '2026-11-04-sheets';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -82,6 +82,7 @@ function act_(action, me, p) {
     case 'rebuildMasterView': admin_(me); return withLock_(function () { return rebuildMasterView_(); });
     case 'saveSettings': admin_(me); return withLock_(function () { return saveSettings_(p); });
     case 'saveKra': admin_(me); return withLock_(function () { return saveKra_(p); });
+    case 'uploadSheet': editor_(me); return uploadSheet_(me, p);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -990,6 +991,7 @@ function data_(me) {
     sheetSynced: PropertiesService.getScriptProperties().getProperty('mvStamp') || '',
     attendance: attendance,
     kra: kra_(),
+    sheets: sheetScans_(),
     serverTime: new Date().toISOString()
   };
 }
@@ -1455,6 +1457,62 @@ function saveKra_(p) {
     si.getRange(rowNum, 1, 1, KRA_INPUT_COLS.length).setValues([[m, tr].concat(vals)]);
   }
   return { ok: true, kra: kra_() };
+}
+
+/* ------------------------------------------------------------------ signed attendance sheets (audit) */
+// Photos or PDFs of the signed paper sheet, one or more per session (date + module + L&D). Files go to the Drive
+// folder "CCR Attendance Sheets/<yyyy-MM>" of the account running this script; the "Attendance Sheets" tab lists them.
+var SCAN_SHEET = 'Attendance Sheets';
+var SCAN_COLS = ['Date', 'Module', 'L&D', 'File', 'Link', 'Uploaded By', 'Uploaded At'];
+var SCAN_MAX_FILES = 6, SCAN_MAX_BYTES = 10 * 1024 * 1024;
+
+function scanFolder_(month) {
+  var props = PropertiesService.getScriptProperties(), id = props.getProperty('scanFolder'), root = null;
+  if (id) { try { root = DriveApp.getFolderById(id); } catch (e) { root = null; } }
+  if (!root) { root = DriveApp.createFolder('CCR Attendance Sheets'); props.setProperty('scanFolder', root.getId()); }
+  var it = root.getFoldersByName(month);
+  return it.hasNext() ? it.next() : root.createFolder(month);
+}
+
+function sheetScans_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SCAN_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().filter(function (r) { return r[4]; }).map(function (r) {
+    return [iso_(r[0]), String(r[1]).trim(), String(r[2]).trim(), String(r[4]), String(r[5]).trim()];
+  });
+}
+
+function uploadSheet_(me, p) {
+  var date = iso_(p.date), module = String(p.module || '').trim(), trainer = String(p.trainer || '').trim();
+  var files = Array.isArray(p.files) ? p.files : [];
+  if (!toDate_(date) || !module || !trainer) throw new Error('Pick the session first.');
+  if (!files.length) throw new Error('Choose a photo or PDF of the signed sheet.');
+  if (files.length > SCAN_MAX_FILES) throw new Error('At most ' + SCAN_MAX_FILES + ' files at a time.');
+  // the session must exist; L&D and SPOC may upload for sessions in their name or entered by them
+  var at = table_(SH.AT), cD = col_(at, 'Date'), cM = col_(at, 'Module'), cT = col_(at, 'Trainer'), cBy = col_(at, 'Entered By');
+  var rows = at.rows.filter(function (r) { return iso_(r[cD]) === date && String(r[cM]).trim() === module && String(r[cT]).trim().toLowerCase() === trainer.toLowerCase(); });
+  if (!rows.length) throw new Error('No entries found for this session. Save the attendance first.');
+  var mine = rows.some(function (r) { return String(r[cBy]).trim().toLowerCase() === me.email; }) || trainer.toLowerCase() === me.name.toLowerCase();
+  if (me.role !== 'admin' && !mine) throw new Error('You can upload sheets only for your own sessions.');
+  var folder = scanFolder_(date.slice(0, 7)), stamp = new Date(), out = [];
+  var base = (date + ' ' + module + ' - ' + trainer).replace(/[\\\/:*?"<>|]/g, '-');
+  files.forEach(function (f, i) {
+    var type = String(f.type || '');
+    if (!/^image\/|^application\/pdf$/.test(type)) throw new Error('Only photos or PDF files can be uploaded.');
+    var bytes = Utilities.base64Decode(String(f.data || ''));
+    if (!bytes.length || bytes.length > SCAN_MAX_BYTES) throw new Error('Each file must be under 10 MB.');
+    var ext = type === 'application/pdf' ? '.pdf' : type === 'image/png' ? '.png' : '.jpg';
+    var file = folder.createFile(Utilities.newBlob(bytes, type, base + (files.length > 1 ? ' (' + (i + 1) + ')' : '') + ext));
+    out.push([toDate_(date), module, trainer, file.getName(), file.getUrl(), me.email, stamp]);
+  });
+  withLock_(function () {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(SCAN_SHEET);
+    if (!sh) { sh = ss.insertSheet(SCAN_SHEET); sh.getRange(1, 1, 1, SCAN_COLS.length).setValues([SCAN_COLS]).setFontWeight('bold'); sh.setFrozenRows(1); }
+    var start = sh.getLastRow() + 1;
+    sh.getRange(start, 1, out.length, SCAN_COLS.length).setValues(out);
+    sh.getRange(start, 1, out.length, 1).setNumberFormat('dd-mmm-yyyy');
+  });
+  return { ok: true, saved: out.length, sheets: sheetScans_() };
 }
 
 function saveSettings_(p) {

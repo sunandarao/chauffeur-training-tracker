@@ -9,7 +9,7 @@ Training tracker for ECO Mobility CCR chauffeurs. Live site: https://chauffeur-t
 | Website (screens) | Vercel | `index.html`, `app.js`, `styles.css`, `config.js`, `logo.webp` |
 | Chauffeur feedback form (Feedback QR, no login) | Vercel | `feedback.html`, `feedback.js`, `fb-i18n.js` (translations) |
 | Backend API (logins, saving, feedback) | Google Apps Script, attached to the tracker's Google Sheet | `apps-script/Code.gs` |
-| Data | The Google Sheet (tabs: Chauffeurs, Attendance, Modules, Users, Settings, Regions, FeedbackLinks, Feedback Inbox, Not in Master, Master View, KRA Setup, KRA Inputs) | – |
+| Data | The Google Sheet (tabs: Chauffeurs, Attendance, Modules, Users, Settings, Regions, FeedbackLinks, Feedback Inbox, Not in Master, Master View, KRA Setup, KRA Inputs, Attendance Sheets) | – |
 
 The website has no build step: Vercel serves the files as they are. `config.js` holds the Apps Script web app URL.
 
@@ -17,3 +17,5 @@ The website has no build step: Vercel serves the files as they are. `config.js` 
 
 - **Website:** edit the files here and deploy to Vercel (automatic once the Vercel project is linked to this repository). Bump the `?v=` number on `styles.css` / `app.js` in `index.html` so browsers load the new version.
 - **Backend:** paste `apps-script/Code.gs` into the Apps Script editor (Extensions → Apps Script in the Sheet), save, then Deploy → Manage deployments → edit → New version. The web app URL stays the same.
+
+Signed attendance-sheet photos are saved by the Apps Script to the Drive folder "CCR Attendance Sheets/<yyyy-MM>" of the account that deploys it.

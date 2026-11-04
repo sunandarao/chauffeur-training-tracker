@@ -883,6 +883,7 @@
     const median = v => { const x = v.slice().sort((a, b) => a - b); return x[Math.floor(x.length / 2)] || 0; };
     const perDay = groupBy(M.fyAtt, a => `${a.code}|${a.date}`);
     const byChMod = groupBy(M.fyAtt, a => `${a.code}|${a.module}`);
+    const scans = sheetIndex();
     return sessions.map(list => {
       const a0 = list[0], flags = [];
       const lateBy = Math.max(...list.map(a => (a.at ? days(a.date, a.at.slice(0, 10)) : 0)));
@@ -897,6 +898,7 @@
       const locs = Array.from(new Set(list.map(a => String(a.loc).toUpperCase())));
       const owners = new Set(locs.map(l => owner[l] || l));
       if (owners.size > 1) flags.push(`chauffeurs from ${locs.length} locations: ${locs.join(', ')}`);
+      if ('sheets' in M.d && a0.date >= SHEETS_FROM && !scans.has(sheetKey(a0.date, a0.module, a0.trainer))) flags.push('no signed sheet uploaded');
       return { key: `${a0.date}|${a0.module}|${a0.trainer}`, date: a0.date, module: a0.module, trainer: a0.trainer, by: Array.from(new Set(list.map(a => a.by).filter(Boolean))).join(', '),
         n: list.length, locs: locs.join(', '), flags, nf: flags.length, list };
     }).filter(s => s.flags.length);
@@ -992,6 +994,119 @@
     };
   }
 
+  /* ---------------------------------------------------------------- attendance sheets (paper, for audit) */
+  // The ECO "Program Attendance Sheet": header block, then 25 numbered rows per page. Expected chauffeurs are
+  // printed in; the blank rows are for walk-ins and chauffeurs not in the master (code or NEW, name, phone).
+  const SHEET_ROWS = 25, SHEETS_FROM = '2026-11-01'; // sessions from this date should have a signed sheet uploaded
+  function printSheet(o) {
+    const people = o.people || [], extra = o.blank == null ? 8 : o.blank;
+    const total = Math.max(SHEET_ROWS, Math.ceil((people.length + extra) / SHEET_ROWS) * SHEET_ROWS);
+    const rows = []; for (let i = 0; i < total; i++) rows.push(people[i] || null);
+    const pages = []; for (let i = 0; i < rows.length; i += SHEET_ROWS) pages.push(rows.slice(i, i + SHEET_ROWS));
+    const head = `<table class="hd"><tr><th>Name of Program</th><td>${esc(o.module || '')}</td><th>Date</th><td>${o.date ? esc(dShort(o.date)) : ''}</td></tr>
+      <tr><th>Faculty</th><td>${esc(o.trainer || '')}</td><th>Start Time</th><td></td></tr><tr><th>Venue</th><td></td><th>End Time</th><td></td></tr>
+      <tr><th>Place</th><td>${esc(o.loc && o.loc !== 'All' ? o.loc : '')}</td><th>L&amp;D SPOC</th><td></td></tr></table>`;
+    const page = (list, pi) => `<section class="pg">
+      <img src="${esc(location.origin)}/logo.webp" alt="ECO Mobility" class="lg"><h1>Program Attendance Sheet</h1>${head}
+      <table class="rows"><thead><tr><th>Sl.<br>No.</th><th>Chauffeur ID<br>License No.#</th><th>Name</th><th>Vehicle #</th><th>Phone Number</th><th>Signature</th></tr></thead>
+      <tbody>${list.map((p, i) => `<tr><td class="n">${pi * SHEET_ROWS + i + 1}</td><td>${p ? esc(p.code) : ''}</td><td>${p ? esc(p.name) : ''}</td><td></td><td>${p ? esc(p.mobile || '') : ''}</td><td></td></tr>`).join('')}</tbody></table>
+      <p class="ft">Pre-printed: ${people.length} · Added by hand: ______ · Total signed: ______ &nbsp;&nbsp; Faculty signature: ____________________ &nbsp;&nbsp; Page ${pi + 1} of ${pages.length}</p></section>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Attendance ${esc(o.date || '')} ${esc(o.module || '')}</title><style>
+      @page { size: A4; margin: 12mm; } body { font: 11px/1.3 Arial, sans-serif; color: #000; margin: 0; }
+      .pg { page-break-after: always; } .pg:last-child { page-break-after: auto; }
+      .lg { display: block; height: 52px; margin: 0 auto 6px; } h1 { text-align: center; font-size: 17px; margin: 4px 0 10px; }
+      table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #000; padding: 3px 5px; text-align: left; vertical-align: middle; }
+      .hd { margin-bottom: 10px; } .hd th { width: 18%; } .hd td { width: 32%; height: 16px; }
+      .rows th { text-align: center; font-size: 10px; } .rows td { height: 23px; } .rows td.n { text-align: center; width: 6%; }
+      .rows th:nth-child(2) { width: 14%; } .rows th:nth-child(3) { width: 24%; } .rows th:nth-child(4) { width: 14%; } .rows th:nth-child(5) { width: 15%; }
+      .ft { font-size: 10px; margin-top: 8px; }</style></head><body>${pages.map(page).join('')}</body></html>`;
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(fr);
+    fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+    const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Printing is not available here.'); } setTimeout(() => fr.remove(), 60000); };
+    const img = fr.contentDocument.querySelector('img');
+    if (img && !img.complete) { img.onload = img.onerror = go; setTimeout(go, 2500); } else go();
+  }
+  const sheetKey = (date, module, trainer) => `${date}|${module}|${String(trainer).toLowerCase()}`;
+  function sheetIndex() {
+    const m = new Map();
+    ((S.M.d && S.M.d.sheets) || []).forEach(r => { const k = sheetKey(r[0], r[1], r[2]); if (!m.has(k)) m.set(k, []); m.get(k).push({ url: r[3], by: r[4] }); });
+    return m;
+  }
+  // phone photos are shrunk to about 1600 px so uploads stay small; PDFs go as they are
+  function fileToUpload(file) {
+    return new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onerror = () => reject(new Error('Could not read ' + file.name));
+      if (!/^image\//.test(file.type) || file.type === 'image/gif') {
+        rd.onload = () => resolve({ name: file.name, type: file.type || 'application/pdf', data: String(rd.result).split(',')[1] });
+        return rd.readAsDataURL(file);
+      }
+      rd.onload = () => {
+        const im = new Image();
+        im.onerror = () => resolve({ name: file.name, type: file.type, data: String(rd.result).split(',')[1] });
+        im.onload = () => {
+          const k = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+          cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          resolve({ name: file.name, type: 'image/jpeg', data: cv.toDataURL('image/jpeg', 0.8).split(',')[1] });
+        };
+        im.src = rd.result;
+      };
+      rd.readAsDataURL(file);
+    });
+  }
+  function sheetsPanel() {
+    const M = S.M, me = S.user, idx = sheetIndex();
+    const own = a => me.role === 'admin' || a.mine || a.trainer.toLowerCase() === String(me.name).toLowerCase();
+    const sessions = Array.from(groupBy(M.att.filter(a => a.inFY && own(a)), a => `${a.date}|${a.module}|${a.trainer}`).values())
+      .map(l => ({ date: l[0].date, module: l[0].module, trainer: l[0].trainer, n: l.length, files: idx.get(sheetKey(l[0].date, l[0].module, l[0].trainer)) || [] }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const missing = sessions.filter(x => x.date >= SHEETS_FROM && !x.files.length);
+    const sel = S.sheetSel && sessions.find(x => sheetKey(x.date, x.module, x.trainer) === S.sheetSel) ? S.sheetSel : (missing[0] ? sheetKey(missing[0].date, missing[0].module, missing[0].trainer) : sessions[0] ? sheetKey(sessions[0].date, sessions[0].module, sessions[0].trainer) : '');
+    S.sheetSessions = sessions;
+    return `<section class="panel" id="sheet-panel"><div class="panel-head"><h2>Signed attendance sheets ${missing.length ? `<span class="pill warn">${missing.length} missing</span>` : ''}</h2>
+        <p class="muted">Photo or PDF of the signed paper sheet, kept in Google Drive for audits</p></div>
+      <div class="form-grid"><div class="field" style="grid-column:span 2"><label for="sh-sess">Session</label><select id="sh-sess">${sessions.map(x => { const k = sheetKey(x.date, x.module, x.trainer);
+        return `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(dShort(x.date))} · ${esc(x.module)} · ${esc(x.trainer)} · ${x.n} chauffeurs · ${x.files.length ? '✓ sheet uploaded' : x.date >= SHEETS_FROM ? '✗ no sheet' : 'no sheet'}</option>`; }).join('')}</select></div></div>
+      <div id="sh-files" class="note"></div>
+      <div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" id="sh-pick" type="button"${sessions.length ? '' : ' disabled'}>Upload photo / PDF</button>
+        <input type="file" id="sh-file" accept="image/*,application/pdf" multiple hidden><button class="btn btn-sm" id="sh-print" type="button"${sessions.length ? '' : ' disabled'}>Print sheet for this session</button>
+        <button class="btn btn-sm btn-ghost" id="sh-blank" type="button">Blank sheet</button><span id="sh-msg" class="muted"></span></div></section>`;
+  }
+  function wireSheets() {
+    if (!$('#sheet-panel')) return;
+    const M = S.M, sessions = S.sheetSessions || [];
+    const cur = () => sessions.find(x => sheetKey(x.date, x.module, x.trainer) === $('#sh-sess').value);
+    const show = () => {
+      const x = cur(); if (!x) return;
+      S.sheetSel = $('#sh-sess').value;
+      $('#sh-files').innerHTML = x.files.length ? 'Uploaded: ' + x.files.map((f, i) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">sheet ${i + 1}</a>`).join(' · ') : 'No sheet uploaded for this session yet.';
+    };
+    $('#sh-sess').onchange = show; show();
+    $('#sh-blank').onclick = () => printSheet({ blank: SHEET_ROWS });
+    $('#sh-print').onclick = () => {
+      const x = cur(); if (!x) return;
+      const list = M.att.filter(a => a.date === x.date && a.module === x.module && a.trainer === x.trainer);
+      const locs = Array.from(new Set(list.map(a => a.loc)));
+      printSheet({ module: x.module, date: x.date, trainer: x.trainer, loc: locs.length === 1 ? locs[0] : '', blank: 0,
+        people: list.map(a => ({ code: a.code, name: a.c ? a.c.name : '', mobile: a.c ? a.c.mobile : '' })) });
+    };
+    $('#sh-pick').onclick = () => $('#sh-file').click();
+    $('#sh-file').onchange = async e => {
+      const files = Array.from(e.target.files || []); e.target.value = '';
+      const x = cur(); if (!files.length || !x) return;
+      if (!('sheets' in M.d)) { $('#sh-msg').innerHTML = '<span class="form-error">Update the Apps Script first (see the README), then refresh.</span>'; return; }
+      $('#sh-msg').textContent = 'Uploading…'; $('#sh-pick').disabled = true;
+      try {
+        const payload = await Promise.all(files.map(fileToUpload));
+        const out = await api('uploadSheet', { date: x.date, module: x.module, trainer: x.trainer, files: payload });
+        M.d.sheets = out.sheets; toast(`Saved ${out.saved} file(s) for ${dShort(x.date)} ${x.module}`); render();
+      } catch (err) { if (err.message !== 'AUTH') { $('#sh-msg').innerHTML = `<span class="form-error">${esc(err.message)}</span>`; $('#sh-pick').disabled = false; } }
+    };
+  }
+
   /* ---------------------------------------------------------------- Add training */
   function loadDraft() {
     try { return JSON.parse(store.get(LS.draft) || 'null') || null; } catch (e) { return null; }
@@ -1022,6 +1137,7 @@
       <section class="panel">
         <div class="panel-head"><h2>Chauffeurs attended <span class="pill neutral">${D.people.length}</span></h2>
           <div class="actions"><button class="btn btn-sm" id="a-upload-btn" type="button">Upload Excel / CSV</button><input type="file" id="a-file" accept=".xlsx,.xls,.csv" hidden><button class="btn btn-sm btn-ghost" id="a-template" type="button">Download template</button><button class="btn btn-sm" id="a-paste-btn" type="button">Paste many codes</button>${total ? '<button class="btn btn-sm btn-danger" id="a-clear" type="button">Clear list</button>' : ''}</div></div>
+        <div class="actions" style="margin-top:8px"><button class="btn btn-sm" id="a-sheet" type="button">Print attendance sheet</button><span class="muted">${total ? `${total} chauffeur(s) printed in, plus blank rows for walk-ins` : 'blank sheet, or add the expected chauffeurs first'}</span></div>
         <div id="a-upload-msg"></div>
         <div class="field picker"><label for="a-search">Add chauffeur</label><input id="a-search" placeholder="Type a name or code…" autocomplete="off"><div class="suggest" id="a-suggest" hidden></div></div>
         <div id="a-paste" hidden style="margin-top:10px" class="field"><label for="a-paste-text">Paste codes (comma, space or one per line)</label><textarea id="a-paste-text" placeholder="16628, 19538, 3530"></textarea><div class="actions"><button class="btn btn-sm btn-primary" id="a-paste-add" type="button">Add these codes</button><span id="a-paste-msg" class="muted"></span></div></div>
@@ -1052,6 +1168,9 @@
     if ($('#a-tr')) $('#a-tr').onchange = e => upd('trainer', e.target.value);
     $('#a-loc').onchange = e => upd('loc', e.target.value);
     $('#a-rem').oninput = e => upd('remarks', e.target.value);
+    $('#a-sheet').onclick = () => printSheet({ module: D.module, date: D.date, trainer: D.trainer || me.name, loc: D.loc,
+      people: D.people.map(p => { const c = M.ch[p.code]; return { code: p.code, name: c ? c.name : '', mobile: c ? c.mobile : '' }; })
+        .concat(D.unk.map(u => ({ code: u.code, name: u.name || '', mobile: '' }))) });
     const addCode = code => { if (!D.people.some(p => p.code === code)) D.people.push({ code, q: [], open: false }); saveDraft(); };
 
     // search
@@ -1177,6 +1296,7 @@
           <span class="muted">Columns: Date, Chauffeur Code, Module, L&amp;D${me.role === 'trainer' ? ' (ignored: your name is used)' : ''}, Remarks, Q1–Q7 (optional), Chauffeur Name (only for codes not in master)</span></div>
         <div id="b-out"></div>
       </section>
+      ${sheetsPanel()}
       ${M.pending.length ? `<section class="panel" id="pend-panel"><div class="panel-head"><h2>Not in master <span class="pill warn">${M.pending.length}</span></h2><p class="muted">Not counted until the chauffeur is added to the master${me.role === 'admin' ? ' (Admin → Add or edit a chauffeur, or the weekly master)' : ' – ask the admin to add them'}; they then move into the counts automatically.</p></div>
         <div class="table-wrap tall"><table><thead><tr><th></th><th>Date</th><th>Code</th><th>Name</th><th>Module</th><th>L&amp;D</th><th>Remarks</th>${me.role === 'admin' ? '<th>Entered by</th>' : ''}</tr></thead><tbody>
         ${M.pending.map(p => `<tr><td><input type="checkbox" data-pid="${esc(p.id)}" style="width:auto" aria-label="Select"></td><td>${dShort(p.date)}</td><td><b>${esc(p.code)}</b></td><td>${esc(p.name || '–')}</td><td>${esc(p.module)}</td><td>${esc(p.trainer)}</td><td>${esc(p.remarks)}</td>${me.role === 'admin' ? `<td class="muted">${esc(p.by)}</td>` : ''}</tr>`).join('')}
@@ -1251,6 +1371,7 @@
       };
     };
     wireBulk();
+    wireSheets();
     if ($('#pend-panel')) {
       const pick = () => $$('input[data-pid]:checked').map(x => x.dataset.pid);
       $$('input[data-pid]').forEach(cb => cb.onchange = () => { const n = pick().length; $('#pend-dis').disabled = !n; $('#pend-dis').textContent = n ? `Dismiss ${n} selected` : 'Dismiss selected'; $('#pend-msg').innerHTML = ''; });
