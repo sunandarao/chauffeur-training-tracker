@@ -472,7 +472,7 @@
         <div class="filters">${select('f-dloc', 'Location', ['All'].concat(M.locations), loc)}</div></div>
       ${kpis([
         { label: 'Total Chauffeurs', value: fmt(s.chauffeurs), sub: 'Effective ' + longDate(M.fyStart), go: kGo.total },
-        { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage · target ' + fmt(fyElapsed() * 100, 1) + '%', cls: s.chauffeurs ? ({ good: 'good', warn: 'warn', bad: 'bad' })[covStatus(s.trained / s.chauffeurs)] : '', go: kGo.unique },
+        { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage', cls: s.chauffeurs ? ({ good: 'good', warn: 'warn', bad: 'bad' })[covStatus(s.trained / s.chauffeurs)] : '', go: kGo.unique },
         { label: 'Chauffeurs in Scope', value: fmt(s.never), sub: pct(s.never, s.chauffeurs, 1) + ' of chauffeurs', cls: s.never ? 'bad' : '', go: kGo.never },
         { label: 'Attendees', value: fmt(s.attendances), sub: fmt(sessionsOf(atts)) + ' sessions', go: kGo.att },
         { label: 'Manhours', value: fmt(s.hours, 0), sub: fmt(s.avgHours, 1) + ' per trained chauffeur', cls: 'hours', go: kGo.hours },
@@ -560,7 +560,7 @@
         ${M.locations.length > 1 ? `<div class="filters">${select('f-cloc', 'Location', M.locations, loc)}</div>` : ''}</div>
       ${kpis([
         { label: 'Total Chauffeurs', value: fmt(s.chauffeurs), sub: 'Effective ' + longDate(M.fyStart), go: ['chauffeurs', { loc, st: 'In FY scope' }] },
-        { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage · target ' + fmt(fyElapsed() * 100, 1) + '%' + (natCov != null ? ` · PAN India ${pct(natTot[1], natTot[0], 1)}` : ''), cls: s.chauffeurs ? covStatus(s.trained / s.chauffeurs) : '', go: ['chauffeurs', { loc, st: 'Trained' }] },
+        { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage' + (natCov != null ? ` · PAN India ${pct(natTot[1], natTot[0], 1)}` : ''), cls: s.chauffeurs ? covStatus(s.trained / s.chauffeurs) : '', go: ['chauffeurs', { loc, st: 'Trained' }] },
         { label: 'Chauffeurs in Scope', value: fmt(s.never), sub: pct(s.never, s.chauffeurs, 1) + ' of chauffeurs', cls: s.never ? 'bad' : '', go: ['chauffeurs', { loc, st: 'Not trained' }] },
         { label: 'Attendees', value: fmt(s.attendances), sub: fmt(sessionsOf(atts)) + ' sessions', go: S.user.role === 'viewer' ? ['chauffeurs', { loc, st: 'Trained', sort: 'n' }] : ['entries', { loc, from: M.fyStart, to: M.fyEnd }] },
         { label: 'Manhours', value: fmt(s.hours, 1), sub: fmt(s.avgHours, 1) + ' per trained chauffeur', cls: 'hours', go: ['chauffeurs', { loc, st: 'Trained', sort: 'hrs' }] },
