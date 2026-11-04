@@ -857,7 +857,7 @@
     const pts = scored.reduce((s, r) => s + r.w * r.ach, 0);
     const uniq = chs.filter(c => c.n > 0).length;
     const wAll = rows.reduce((s, r) => s + r.w, 0);
-    return { setup, rows, wAll, chs: chs.length, uniq, hrsOk, fb, resp, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
+    return { setup, rows, wAll, chs: chs.length, uniq, hrsOk, fb, resp, parts: atts.length, rated: rated.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
   }
 
   // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
@@ -932,17 +932,16 @@
     const unowned = knownLocs.filter(l => !owned.has(l));
     $('#main').innerHTML = `
       <div class="view-head"><div><h1>KRA Scorecard</h1><p class="muted">${esc(M.fyLabel)} to date · each L&amp;D is measured on the chauffeurs of their locations, whoever delivered the training</p></div></div>
-      ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Live from the training entries · achievement = KRA points earned on the KPIs that have data</p></div>${table('kra-sum', [
+      ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Live from the training entries · hover a heading to see how it is calculated</p></div>${table('kra-sum', [
         { key: 'trainer', label: 'L&D SPOC' }, { key: 'locs', label: 'Locations' },
-        { key: 'chs', label: 'Total chauffeurs', n: 1, fmt: r => fmt(r.chs) },
-        { key: 'uniq', label: 'Unique covered', n: 1, fmt: r => fmt(r.uniq) },
-        { key: 'hrs', label: 'Trained ≥ 4 hrs', n: 1, fmt: r => `${fmt(r.hrs)} <small class="muted">(${pct(r.hrs, r.chs, 1)})</small>` },
-        { key: 'fb', label: 'Feedback', n: 1, fmt: r => (r.fb == null ? '–' : `${fmt(r.fb, 2)} <small class="muted">(${pctv(r.resp, 0)} resp.)</small>`) },
-        { key: 'cov', label: 'Coverage %', n: 1, fmt: r => (r.cov == null ? '–' : covPill(r.cov)) },
-        { key: 'wIn', label: 'Weightage (KRA)', n: 1, title: 'KRA weightage of the CCR chauffeur KPIs that have data', fmt: r => `${fmt(r.wIn, 0)} of ${fmt(r.wAll, 0)}` },
-        { key: 'pts', label: 'Achievement', n: 1, title: 'KRA points earned (share of the weightage with data)', fmt: r => `<span class="pill ${stat(r.score)}">${fmt(r.pts, 1)} / ${fmt(r.wIn, 1)}</span> <small class="muted">${r.score == null ? '' : fmt(r.score * 100, 0) + '%'}</small>` }
-      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, uniq: c.uniq, hrs: c.hrsOk, fb: c.fb, resp: c.resp,
-        cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, wAll: c.wAll, pts: c.pts, score: c.score })), { sortKey: 'pts', sortDir: 'desc' })}</section>` : ''}
+        { key: 'chs', label: 'Total chauffeurs', n: 1, title: 'Chauffeurs in the master at these locations, in scope this FY', fmt: r => fmt(r.chs) },
+        { key: 'cov', label: 'Unique covered (coverage %)', n: 1, title: 'Chauffeurs with at least one training this FY ÷ total chauffeurs', fmt: r => `${fmt(r.uniq)} ${r.cov == null ? '' : covPill(r.cov)}` },
+        { key: 'resp', label: 'Feedback received', n: 1, title: 'Feedbacks ÷ total participants (attendances) · average rating', fmt: r => `${fmt(r.rated)} of ${fmt(r.parts)} <small class="muted">(${pctv(r.resp, 0)})</small>${r.fb == null ? '' : `<br><small class="muted">avg ${fmt(r.fb, 2)}</small>`}` },
+        { key: 'hrsP', label: 'Trained ≥ 4 hrs', n: 1, title: 'Chauffeurs with 4+ training hours this FY ÷ total chauffeurs', fmt: r => `${fmt(r.hrs)} of ${fmt(r.chs)} <small class="muted">(${pct(r.hrs, r.chs, 1)})</small>` },
+        { key: 'wIn', label: 'Weightage of KRA', n: 1, title: 'KRA weightage of the CCR chauffeur KPIs that have data', fmt: r => `${fmt(r.wIn, 0)} of ${fmt(r.wAll, 0)}` },
+        { key: 'pts', label: 'Achieved', n: 1, title: 'KRA points earned', fmt: r => `<span class="pill ${stat(r.score)}">${fmt(r.pts, 1)} of ${fmt(r.wIn, 0)}</span><br><small class="muted">${r.score == null ? '' : fmt(r.score * 100, 0) + '% achieved'}</small>` }
+      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, uniq: c.uniq, hrs: c.hrsOk, hrsP: c.chs ? c.hrsOk / c.chs : null,
+        fb: c.fb, resp: c.resp, rated: c.rated, parts: c.parts, cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, wAll: c.wAll, pts: c.pts, score: c.score })), { sortKey: 'pts', sortDir: 'desc' })}</section>` : ''}
       ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
           <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 0)}% of the ${fmt(c.wAll, 0)}% CCR chauffeur weightage${c.wIn < c.wAll ? ' (KPIs without data are left out)' : ''}</p></div>
         <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th><th class="n">Points</th></tr></thead><tbody>
