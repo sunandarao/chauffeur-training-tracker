@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-04-kra';
+var CODE_VERSION = '2026-11-04-checks';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -949,7 +949,7 @@ function data_(me) {
   var at = table_(SH.AT);
   var A = ['Entry ID', 'Date', 'Code', 'Module', 'Trainer', 'Remarks'].map(function (h) { return col_(at, h); });
   var Q = qHeaders_().map(function (h) { return col_(at, h); });
-  var cBy = col_(at, 'Entered By');
+  var cBy = col_(at, 'Entered By'), cAt = optCol_(at, 'Entered At'), isAdmin = me.role === 'admin';
   var attendance = [], trainedFY = {};
   at.rows.forEach(function (r) {
     var id = String(r[A[0]]).trim();
@@ -958,7 +958,9 @@ function data_(me) {
     if (d >= fyStart && d <= fyEnd) trainedFY[code] = true;
     if (sc && !visible[code]) return;
     attendance.push([id, iso_(r[A[1]]), code_(r[A[2]]), String(r[A[3]]).trim(), String(r[A[4]]).trim(), String(r[A[5]]).trim(),
-      Q.map(function (q) { return rating_(r[q]); }), String(r[cBy]).trim().toLowerCase() === me.email ? 1 : 0]);
+      Q.map(function (q) { return rating_(r[q]); }), String(r[cBy]).trim().toLowerCase() === me.email ? 1 : 0].concat(
+      // who entered it and when, for the admin's checks against the physical attendance sheets
+      isAdmin ? [String(r[cBy]).trim().toLowerCase(), cAt >= 0 && r[cAt] instanceof Date ? Utilities.formatDate(r[cAt], tz_(), "yyyy-MM-dd'T'HH:mm") : ''] : []));
   });
   var us = table_(SH.US);
   var trainers = us.rows.filter(function (r) {

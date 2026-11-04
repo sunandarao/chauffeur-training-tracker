@@ -75,7 +75,7 @@
     });
     const att = [];
     d.attendance.forEach(r => {
-      const a = { id: r[0], date: r[1], code: r[2], module: r[3], trainer: r[4] || '(not recorded)', remarks: r[5], q: (r[6] || []).slice(0, Q_LABELS.length), mine: r[7] === 1 };
+      const a = { id: r[0], date: r[1], code: r[2], module: r[3], trainer: r[4] || '(not recorded)', remarks: r[5], q: (r[6] || []).slice(0, Q_LABELS.length), mine: r[7] === 1, by: r[8] || '', at: r[9] || '' };
       a.c = ch[a.code];
       a.mins = modDur[a.module] || 0;
       a.inFY = a.date >= fyStart && a.date <= fyEnd;
@@ -872,6 +872,61 @@
     return { setup, rows, chs: chs.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
   }
 
+  // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
+  const CHECK_LATE_DAYS = 7, CHECK_REPEAT_DAYS = 30;
+  function sessionChecks() {
+    const M = S.M, owner = {};
+    kraSetup().forEach(s => s.locs.forEach(l => { owner[l] = s.trainer; }));
+    const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+    const sessions = Array.from(groupBy(M.fyAtt, a => `${a.date}|${a.module}|${a.trainer}`).values());
+    const sizes = {}; sessions.forEach(l => { (sizes[l[0].trainer] = sizes[l[0].trainer] || []).push(l.length); });
+    const median = v => { const x = v.slice().sort((a, b) => a - b); return x[Math.floor(x.length / 2)] || 0; };
+    const perDay = groupBy(M.fyAtt, a => `${a.code}|${a.date}`);
+    const byChMod = groupBy(M.fyAtt, a => `${a.code}|${a.module}`);
+    return sessions.map(list => {
+      const a0 = list[0], flags = [];
+      const lateBy = Math.max(...list.map(a => (a.at ? days(a.date, a.at.slice(0, 10)) : 0)));
+      if (lateBy > CHECK_LATE_DAYS) flags.push(`entered ${lateBy} days after the training`);
+      // two modules back to back by the same L&D is normal; the same chauffeur with another L&D that day is not
+      const twice = list.filter(a => perDay.get(`${a.code}|${a.date}`).some(b => b.trainer !== a.trainer)).length;
+      if (twice) flags.push(`${twice} chauffeur(s) also with another L&D that day`);
+      const repeat = list.filter(a => byChMod.get(`${a.code}|${a.module}`).some(b => b !== a && Math.abs(days(a.date, b.date)) <= CHECK_REPEAT_DAYS)).length;
+      if (repeat) flags.push(`${repeat} chauffeur(s) did the same module within ${CHECK_REPEAT_DAYS} days`);
+      const big = Math.max(40, 2 * median(sizes[a0.trainer]));
+      if (list.length > big) flags.push(`large session (${list.length}; usual for this L&D ${median(sizes[a0.trainer])})`);
+      const locs = Array.from(new Set(list.map(a => String(a.loc).toUpperCase())));
+      const owners = new Set(locs.map(l => owner[l] || l));
+      if (owners.size > 1) flags.push(`chauffeurs from ${locs.length} locations: ${locs.join(', ')}`);
+      return { key: `${a0.date}|${a0.module}|${a0.trainer}`, date: a0.date, module: a0.module, trainer: a0.trainer, by: Array.from(new Set(list.map(a => a.by).filter(Boolean))).join(', '),
+        n: list.length, locs: locs.join(', '), flags, nf: flags.length, list };
+    }).filter(s => s.flags.length);
+  }
+  function downloadChecks(rows) {
+    if (!window.XLSX) return toast('Please wait a moment and try again.');
+    const out = [['Session date', 'Module', 'L&D', 'Entered by', 'Why flagged', 'Chauffeur code', 'Chauffeur name', 'Location', 'On the attendance sheet? (Y/N)', 'Note']];
+    rows.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(s => s.list.forEach(a => out.push([dShort(s.date), s.module, s.trainer, s.by, s.flags.join('; '), a.code, a.c ? a.c.name : '', a.loc, '', ''])));
+    const wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(out);
+    ws['!cols'] = [{ wch: 11 }, { wch: 28 }, { wch: 18 }, { wch: 26 }, { wch: 50 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'To verify');
+    XLSX.writeFile(wb, `Sessions_to_verify_${todayIso()}.xlsx`);
+  }
+
+  function checksPanel() {
+    const rows = S.checks = sessionChecks();
+    const hasAt = S.M.fyAtt.some(a => a.at);
+    return `<section class="panel" id="kra-checks"><div class="panel-head"><h2>Check against attendance sheets <span class="pill ${rows.length ? 'warn' : 'good'}">${rows.length}</span></h2>
+        <p class="muted">Sessions with something unusual. Compare them with the physical sheets; a flag is a reason to look, not a finding.</p></div>
+      ${rows.length ? table('kchk', [
+        { key: 'date', label: 'Date', fmt: r => dShort(r.date) }, { key: 'module', label: 'Module' }, { key: 'trainer', label: 'L&D' }, { key: 'by', label: 'Entered by' },
+        { key: 'n', label: 'Chauffeurs', n: 1 }, { key: 'nf', label: 'Why flagged', fmt: r => r.flags.map(f => `<span class="pill warn" style="margin:1px 3px 1px 0">${esc(f)}</span>`).join('') }
+      ], rows, { sortKey: 'nf', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-chk="${esc(r.key)}"` }) : '<p class="empty">Nothing unusual found.</p>'}
+      <div class="actions" style="margin-top:10px">${rows.length ? '<button class="btn btn-sm" id="kchk-dl" type="button">Download list to verify (Excel)</button>' : ''}<span class="muted">Click a session to open its entries.${hasAt ? '' : ' Late-entry checks start once the Apps Script is updated.'}</span></div></section>`;
+  }
+  function wireChecks() {
+    if ($('#kchk-dl')) $('#kchk-dl').onclick = () => downloadChecks(S.checks || []);
+    $$('#main tr[data-chk]').forEach(tr => tr.onclick = () => { const [date, mod, t] = tr.dataset.chk.split('|'); go('entries', { from: date, to: date, mod, tr: t }); });
+  }
+
   function viewKra() {
     const M = S.M, me = S.user, isAdmin = me.role === 'admin';
     const all = kraSetup();
@@ -901,6 +956,7 @@
         <tfoot><tr><td colspan="2">Total</td><td class="n">100%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div></section>`).join('')
         : '<section class="panel"><p class="empty">No KRA scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
       <p class="note">Coverage (≥ ${KRA_HOURS} hrs) is compared with the target for the share of the year gone (88% × ${fyMonthsDone()} of 12 months). Feedback achievement is scaled down when fewer than 88% of attendees gave feedback. Incident reduction uses the duty and incident counts in the chauffeur master.</p>
+      ${isAdmin ? checksPanel() : ''}
       ${isAdmin ? `<section class="panel" id="kra-in"><div class="panel-head"><h2>Monthly inputs</h2><p class="muted">Figures the tracker cannot calculate. Saved to the "KRA Inputs" tab of the Google Sheet.</p></div>
         <div class="form-grid">${select('ki-tr', 'L&D', all.map(s => s.trainer), (S.kraIn && S.kraIn.tr) || all[0].trainer)}${select('ki-m', 'Month', M.months.filter(m => m <= todayIso().slice(0, 7)).map(m => [m, monthLabel(m)]), (S.kraIn && S.kraIn.m) || todayIso().slice(0, 7))}</div>
         <div class="form-grid" id="ki-fields" style="margin-top:10px"></div>
@@ -912,6 +968,7 @@
         <div class="actions" style="margin-top:8px"><button class="btn btn-primary" id="ks-save" type="button">Save locations</button><span id="ks-msg" class="muted"></span></div></section>` : ''}`;
     wireSort($('#main'), render);
     if (!isAdmin) return;
+    wireChecks();
     const kin = S.kraIn = S.kraIn || {};
     const fill = () => {
       kin.tr = $('#ki-tr').value; kin.m = $('#ki-m').value;
