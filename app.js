@@ -857,7 +857,13 @@
     const pts = scored.reduce((s, r) => s + r.w * r.ach, 0);
     const uniq = chs.filter(c => c.n > 0).length;
     const wAll = rows.reduce((s, r) => s + r.w, 0);
-    return { setup, rows, wAll, chs: chs.length, uniq, hrsOk, fb, resp, parts: atts.length, rated: rated.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
+    // who delivered the training at these locations (shared locations: L&D Head, people who left, outside trainers)
+    const trainedBy = {}; atts.forEach(a => { (trainedBy[a.code] = trainedBy[a.code] || new Set()).add(a.trainer); });
+    const delivered = Array.from(groupBy(atts, a => a.trainer).entries()).map(([t, l]) => ({
+      t, sess: new Set(l.map(a => `${a.date}|${a.module}`)).size, att: l.length, uniq: new Set(l.map(a => a.code)).size,
+      only: new Set(l.filter(a => trainedBy[a.code].size === 1).map(a => a.code)).size, hrs: l.reduce((s, a) => s + a.mins, 0) / 60, share: atts.length ? l.length / atts.length : 0
+    })).sort((a, b) => b.att - a.att);
+    return { setup, rows, wAll, delivered, chs: chs.length, uniq, hrsOk, fb, resp, parts: atts.length, rated: rated.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
   }
 
   // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
@@ -948,7 +954,10 @@
         ${c.rows.map(r => `<tr><td>${esc(r.kra)}</td><td>${esc(r.kpi)}${r.sub ? `<br><small class="muted">${esc(r.sub)}</small>` : ''}</td><td class="n">${fmt(r.w, 1)}%</td><td>${esc(r.target)}</td>
           <td class="n">${r.actual == null ? '<span class="muted">no data</span>' : esc(r.actual)}</td><td class="n">${r.ach == null ? '–' : `<span class="pill ${stat(r.ach)}">${fmt(r.ach * 100, 0)}%</span>`}</td>
           <td class="n">${r.ach == null ? '–' : fmt(r.w * r.ach, 1)}</td></tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="2">Total</td><td class="n">${fmt(c.wAll, 0)}%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div></section>`).join('')
+        <tfoot><tr><td colspan="2">Total</td><td class="n">${fmt(c.wAll, 0)}%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div><details style="margin-top:10px"${c.delivered.length > 1 ? ' open' : ''}><summary><b>Who delivered</b> the training at these locations</summary>
+          <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>L&amp;D</th><th class="n">Sessions</th><th class="n">Attendances</th><th class="n">Unique chauffeurs</th><th class="n" title="Chauffeurs trained only by this person">Only by them</th><th class="n">Manhours</th><th class="n">Share</th></tr></thead><tbody>
+          ${c.delivered.map(d => `<tr><td>${esc(d.t)}${d.t === c.setup.trainer ? ' <span class="pill neutral">own</span>' : ''}</td><td class="n">${fmt(d.sess)}</td><td class="n">${fmt(d.att)}</td><td class="n">${fmt(d.uniq)}</td><td class="n">${fmt(d.only)}</td><td class="n">${fmt(d.hrs, 0)}</td><td class="n">${bar(d.share, 1, pctv(d.share, 0))}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No training yet.</td></tr>'}</tbody></table></div>
+          <p class="note">A chauffeur trained by more than one person counts once in the scorecard; "Only by them" counts chauffeurs nobody else trained.</p></details></section>`).join('')
         : '<section class="panel"><p class="empty">No KRA scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
       <p class="note">Coverage (≥ ${KRA_HOURS} hrs) is compared with the target for the share of the year gone (88% × ${fyMonthsDone()} of 12 months). Feedback achievement is scaled down when fewer than 88% of attendees gave feedback. Incident reduction uses the duty and incident counts in the chauffeur master.</p>
       ${isAdmin ? checksPanel() : ''}
