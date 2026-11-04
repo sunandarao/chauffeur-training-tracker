@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-10-08-users';
+var CODE_VERSION = '2026-11-04-kra';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -81,6 +81,7 @@ function act_(action, me, p) {
     case 'dismissInbox': admin_(me); return withLock_(function () { return dismissInbox_(p); });
     case 'rebuildMasterView': admin_(me); return withLock_(function () { return rebuildMasterView_(); });
     case 'saveSettings': admin_(me); return withLock_(function () { return saveSettings_(p); });
+    case 'saveKra': admin_(me); return withLock_(function () { return saveKra_(p); });
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -986,6 +987,7 @@ function data_(me) {
     pending: listPending_(me),
     sheetSynced: PropertiesService.getScriptProperties().getProperty('mvStamp') || '',
     attendance: attendance,
+    kra: kra_(),
     serverTime: new Date().toISOString()
   };
 }
@@ -1393,6 +1395,64 @@ function mergeModule_(p) {
   }
   if (iFrom >= 0) mo.sh.getRange(iFrom + 2, 3).setValue('No');
   return { ok: true, moved: moved };
+}
+
+/* ------------------------------------------------------------------ KRA scorecard */
+// "KRA Setup": which locations each L&D person is measured on. "KRA Inputs": the monthly figures the tracker
+// cannot calculate itself (sessions planned, engagement, assessment, reporting, LMS, special projects).
+// Both tabs are created on the first save from the app's KRA tab.
+var KRA_SETUP_COLS = ['L&D', 'Locations'];
+var KRA_INPUT_COLS = ['Month', 'L&D', 'Sessions Planned', 'Engagement %', 'Assessment Improvement %', 'Reporting %', 'LMS %', 'Projects Completed'];
+
+function kraSheet_(name, cols) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold'); sh.setFrozenRows(1); }
+  return sh;
+}
+
+function kraRows_(name, width) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
+}
+
+function kra_() {
+  var num = function (v) { return v === '' || v === null || isNaN(Number(v)) ? '' : Number(v); };
+  return {
+    setup: kraRows_('KRA Setup', 2).filter(function (r) { return String(r[0]).trim(); }).map(function (r) { return [String(r[0]).trim(), String(r[1]).trim()]; }),
+    inputs: kraRows_('KRA Inputs', KRA_INPUT_COLS.length).filter(function (r) { return String(r[1]).trim(); }).map(function (r) {
+      var m = r[0] instanceof Date ? Utilities.formatDate(r[0], tz_(), 'yyyy-MM') : String(r[0]).trim().slice(0, 7);
+      return [m, String(r[1]).trim()].concat(r.slice(2).map(num));
+    })
+  };
+}
+
+/** p.setup = [[L&D, 'LOC1, LOC2']] replaces the setup; p.input = {month: 'yyyy-MM', trainer, values: [6 numbers or '']} upserts one row. */
+function saveKra_(p) {
+  if (Array.isArray(p.setup)) {
+    var sh = kraSheet_('KRA Setup', KRA_SETUP_COLS);
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 2).clearContent();
+    var rows = p.setup.filter(function (r) { return r && String(r[0]).trim(); }).map(function (r) { return [String(r[0]).trim(), String(r[1] || '').trim().toUpperCase()]; });
+    if (rows.length) sh.getRange(2, 1, rows.length, 2).setValues(rows);
+  }
+  if (p.input) {
+    var m = String(p.input.month || ''), tr = String(p.input.trainer || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(m) || !tr) throw new Error('Pick a month and an L&D person.');
+    var vals = (Array.isArray(p.input.values) ? p.input.values : []).slice(0, KRA_INPUT_COLS.length - 2).map(function (v) {
+      if (v === '' || v === null || v === undefined) return '';
+      var n = Number(v); if (isNaN(n) || n < 0) throw new Error('Figures must be numbers of 0 or more.'); return n;
+    });
+    while (vals.length < KRA_INPUT_COLS.length - 2) vals.push('');
+    var si = kraSheet_('KRA Inputs', KRA_INPUT_COLS), rowsI = kraRows_('KRA Inputs', 2), at = -1;
+    rowsI.forEach(function (r, i) {
+      var rm = r[0] instanceof Date ? Utilities.formatDate(r[0], tz_(), 'yyyy-MM') : String(r[0]).trim().slice(0, 7);
+      if (rm === m && String(r[1]).trim().toLowerCase() === tr.toLowerCase()) at = i;
+    });
+    var rowNum = at >= 0 ? at + 2 : si.getLastRow() + 1;
+    si.getRange(rowNum, 1).setNumberFormat('@'); // keep '2026-10' as text, not a date
+    si.getRange(rowNum, 1, 1, KRA_INPUT_COLS.length).setValues([[m, tr].concat(vals)]);
+  }
+  return { ok: true, kra: kra_() };
 }
 
 function saveSettings_(p) {

@@ -9,7 +9,7 @@ Training tracker for ECO Mobility CCR chauffeurs. Live site: https://chauffeur-t
 | Website (screens) | Vercel | `index.html`, `app.js`, `styles.css`, `config.js`, `logo.webp` |
 | Chauffeur feedback form (Feedback QR, no login) | Vercel | `feedback.html`, `feedback.js`, `fb-i18n.js` (translations) |
 | Backend API (logins, saving, feedback) | Google Apps Script, attached to the tracker's Google Sheet | `apps-script/Code.gs` |
-| Data | The Google Sheet (tabs: Chauffeurs, Attendance, Modules, Users, Settings, Regions, FeedbackLinks, Feedback Inbox, Not in Master, Master View) | – |
+| Data | The Google Sheet (tabs: Chauffeurs, Attendance, Modules, Users, Settings, Regions, FeedbackLinks, Feedback Inbox, Not in Master, Master View, KRA Setup, KRA Inputs) | – |
 
 The website has no build step: Vercel serves the files as they are. `config.js` holds the Apps Script web app URL.
 

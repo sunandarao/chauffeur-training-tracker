@@ -245,7 +245,7 @@
 
   /* Routing: every screen has an address (#/chauffeurs?loc=PUNE&st=Not%20trained), so Back/Forward,
      refresh and shared links open the same data. Tiles and table rows call go() to jump to the matching list. */
-  const VIEWS = ['dashboard', 'locations', 'chauffeurs', 'feedback', 'add', 'entries', 'admin'];
+  const VIEWS = ['dashboard', 'locations', 'chauffeurs', 'feedback', 'kra', 'add', 'entries', 'admin'];
   const chfDefault = () => ({ q: '', loc: 'All', act: 'All', st: 'All', cat: 'All', type: 'All', mod: 'All', inc: 'All' });
   // Active unless the master gives a leaving date or a status such as Left / Inactive / Resigned
   const isActive = c => !c.dol && !/left|inactive|resign|abscond|terminat/i.test(c.status || '');
@@ -317,7 +317,7 @@
     if ((S.view === 'add' || S.view === 'entries') && S.user.role === 'viewer') S.view = 'dashboard';
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === S.view));
     destroyCharts();
-    const views = { dashboard: viewDashboard, locations: viewLocation, chauffeurs: viewChauffeurs, feedback: viewFeedback, add: viewAdd, entries: viewEntries, admin: viewAdmin };
+    const views = { dashboard: viewDashboard, locations: viewLocation, chauffeurs: viewChauffeurs, feedback: viewFeedback, kra: viewKra, add: viewAdd, entries: viewEntries, admin: viewAdmin };
     (views[S.view] || viewDashboard)();
     if (S.view === 'dashboard' || S.view === 'locations') welcome();
     wireGo($('#main'));
@@ -789,6 +789,156 @@
     $$('#main tr[data-code]').forEach(tr => tr.onclick = () => openChauffeur(tr.dataset.code));
     wireSort($('#main'), render);
     hbarChart('c-fq', qRows.map((r, i) => 'Q' + (i + 1)), qRows.map(r => (r.avg == null ? 0 : +r.avg.toFixed(2))), cssVar('--accent'), 'Average', { max: 5 });
+  }
+
+  /* ---------------------------------------------------------------- KRA scorecard */
+  // One card per L&D person, measured on the chauffeurs of their locations (whoever trained them, so the L&D
+  // Head's sessions count for the location owner). Figures the tracker cannot calculate come from the
+  // monthly "KRA Inputs" the admin enters here. Targets and weightage follow the KRA sheet.
+  const KRA_DEFAULT_SETUP = [
+    ['Rohan Kothekar', 'MUMBAI, MUMBAI MODULAR, PUNE, AHMEDABAD, CHAKAN, NAGPUR, INDORE'],
+    ['Charan Kumar', 'BANGALORE, HYDERABAD'],
+    ['James Samuel', 'CHENNAI, COIMBATORE, COCHIN'],
+    ['Shashank Chander', 'NOIDA, KOLKATA, LUCKNOW & KANPUR, JAIPUR, CHANDIGARH, GUWAHATI, BHUBANESHWAR, PATNA, OTHER CITIES']
+  ];
+  // manual inputs, in the order of the KRA Inputs columns after Month and L&D
+  const KRA_IN = [
+    { key: 'planned', label: 'Sessions planned', unit: '' }, { key: 'eng', label: 'Engagement programmes executed', unit: '%' },
+    { key: 'assess', label: 'Post-training assessment improvement', unit: '%' }, { key: 'report', label: 'Reports submitted on time', unit: '%' },
+    { key: 'lms', label: 'Training hours tracked via LMS', unit: '%' }, { key: 'proj', label: 'Special projects completed', unit: '' }
+  ];
+  const INDUCTION_RE = /induction/i, KRA_HOURS = 4, NEW_HIRE_DAYS = 7;
+
+  function kraSetup() {
+    const s = (S.M.d.kra && S.M.d.kra.setup) || [];
+    return (s.length ? s : KRA_DEFAULT_SETUP).map(r => ({ trainer: r[0], locs: String(r[1] || '').split(',').map(x => x.trim().toUpperCase()).filter(Boolean) }));
+  }
+  // monthly inputs for one L&D person, FY months up to now: { 'yyyy-mm': {planned, eng, ...} }
+  function kraInputs(trainer) {
+    const out = {};
+    ((S.M.d.kra && S.M.d.kra.inputs) || []).forEach(r => {
+      if (String(r[1]).toLowerCase() !== trainer.toLowerCase()) return;
+      const o = {}; KRA_IN.forEach((k, i) => { o[k.key] = r[2 + i] === '' || r[2 + i] == null ? null : Number(r[2 + i]); });
+      out[r[0]] = o;
+    });
+    return out;
+  }
+  const isoPlus = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(y, m - 1, d + days); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
+
+  function kraCalc(setup) {
+    const M = S.M, locs = new Set(setup.locs), today = todayIso(), thisMonth = today.slice(0, 7);
+    const chs = M.scoped.filter(c => locs.has(String(c.loc).toUpperCase()));
+    const atts = M.fyAtt.filter(a => locs.has(String(a.loc).toUpperCase()));
+    const inp = kraInputs(setup.trainer);
+    const months = M.months.filter(m => m <= thisMonth && Object.prototype.hasOwnProperty.call(inp, m));
+    const avgIn = k => { const v = months.map(m => inp[m][k]).filter(x => x != null); return v.length ? avg(v) : null; };
+    const sumIn = k => { const v = months.map(m => inp[m][k]).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) : null; };
+    const cap = v => Math.max(0, Math.min(1, v));
+    const rows = [];
+    // 1a: chauffeurs with at least half a man-day; measured against the share of the year gone
+    const hrsOk = chs.filter(c => c.mins >= KRA_HOURS * 60).length, cov4 = chs.length ? hrsOk / chs.length : null;
+    const pro = 0.88 * fyElapsed();
+    rows.push({ kra: '1. Training Coverage & Capability Building', kpi: `CCR chauffeurs trained ≥ ${KRA_HOURS} hrs (0.5 man-day)`, w: 35, target: `88% by Mar · ${fmt(pro * 100, 1)}% by now`,
+      actual: cov4 == null ? null : `${fmt(cov4 * 100, 1)}%`, sub: `${fmt(hrsOk)} of ${fmt(chs.length)} · unique coverage ${pct(chs.filter(c => c.n > 0).length, chs.length, 1)}`, ach: cov4 == null || !pro ? null : cap(cov4 / pro) });
+    // 2a: new joiners this FY (at least 7 days ago) with an induction by day 7
+    const joiners = chs.filter(c => c.doj && c.doj >= M.fyStart && isoPlus(c.doj, NEW_HIRE_DAYS) <= today);
+    const inducted = joiners.filter(c => c.att.some(a => INDUCTION_RE.test(a.module) && a.date <= isoPlus(c.doj, NEW_HIRE_DAYS)));
+    rows.push({ kra: '2. Onboarding & Chauffeur Engagement', kpi: `New hires inducted within ${NEW_HIRE_DAYS} days of joining`, w: 5, target: '99%',
+      actual: joiners.length ? pct(inducted.length, joiners.length, 1) : null, sub: joiners.length ? `${fmt(inducted.length)} of ${fmt(joiners.length)} joiners` : 'no joiners with a date of joining', ach: joiners.length ? cap(inducted.length / joiners.length / 0.99) : null });
+    // 2b: sessions held at the locations in the months that have a plan
+    const planned = sumIn('planned');
+    const planMonths = new Set(months.filter(m => inp[m].planned != null));
+    const held = new Set(atts.filter(a => planMonths.has(a.date.slice(0, 7))).map(a => `${a.date}|${a.module}|${a.trainer}`)).size;
+    rows.push({ kra: '', kpi: 'Sessions conducted ÷ planned', w: 5, target: '99%', actual: planned ? pct(held, planned, 0) : null,
+      sub: planned ? `${fmt(held)} held of ${fmt(planned)} planned` : 'enter sessions planned', ach: planned ? cap(held / planned / 0.99) : null });
+    // 3a: average rating, held back when fewer than 88% of attendees gave feedback
+    const rated = atts.filter(a => a.rating != null), fb = rated.length ? avg(rated.map(a => a.rating)) : null, resp = atts.length ? rated.length / atts.length : null;
+    rows.push({ kra: '3. Training Program Effectiveness', kpi: 'Average chauffeur feedback (1–5), min. 88% response', w: 7.5, target: '4.5 · 88% response',
+      actual: fb == null ? null : fmt(fb, 2), sub: resp == null ? '' : `response rate ${pctv(resp, 0)}`, ach: fb == null ? null : cap(fb / 4.5) * cap(resp / 0.88) });
+    const eng = avgIn('eng');
+    rows.push({ kra: '', kpi: 'Engagement programmes / Birthday / Shandaar Chauffeur executed', w: 7.5, target: '100%', actual: eng == null ? null : `${fmt(eng, 0)}%`, sub: 'monthly input', ach: eng == null ? null : cap(eng / 100) });
+    // 4a: incidents per 1,000 duties this FY vs last FY (the master has incidents from FY 25-26)
+    const col = re => M.extraCols.findIndex(h => re.test(h));
+    const iPrev = col(/incident.*25-26/i), iCur = col(/incident.*26-27/i), dPrev = col(/duty.*25-26/i), dCur = col(/duty.*26-27/i);
+    const tot = i => (i < 0 ? 0 : chs.reduce((s, c) => s + (Number(c.extra[i]) || 0), 0));
+    const rPrev = tot(dPrev) ? tot(iPrev) / tot(dPrev) * 1000 : null, rCur = tot(dCur) ? tot(iCur) / tot(dCur) * 1000 : null;
+    const red = rPrev && rCur != null ? (rPrev - rCur) / rPrev : null;
+    rows.push({ kra: '4. Training Impact & Incident Reduction', kpi: 'Reduction in incident rate vs FY 25-26', w: 7.5, target: '10% reduction',
+      actual: red == null ? null : `${fmt(red * 100, 1)}%`, sub: rPrev == null ? 'no duty data' : `${fmt(rCur, 2)} vs ${fmt(rPrev, 2)} per 1,000 duties`, ach: red == null ? null : cap(red / 0.10) });
+    const ass = avgIn('assess');
+    rows.push({ kra: '', kpi: 'Post-training assessment score improvement', w: 7.5, target: '15%', actual: ass == null ? null : `${fmt(ass, 1)}%`, sub: 'monthly input', ach: ass == null ? null : cap(ass / 15) });
+    const rep = avgIn('report');
+    rows.push({ kra: '5. Reporting Standards & Governance', kpi: 'Observation reports (48 hrs) + trackers & L&D records on time', w: 10, target: '95%', actual: rep == null ? null : `${fmt(rep, 0)}%`, sub: 'monthly input', ach: rep == null ? null : cap(rep / 95) });
+    const lms = avgIn('lms');
+    rows.push({ kra: '6. LMS Adoption', kpi: 'Training hours delivered and tracked via LMS', w: 10, target: '60%', actual: lms == null ? null : `${fmt(lms, 0)}%`, sub: 'monthly input', ach: lms == null ? null : cap(lms / 60) });
+    const proj = sumIn('proj');
+    rows.push({ kra: '7. Special Projects', kpi: 'L&D special projects completed on time (incl. automation)', w: 5, target: '4 projects', actual: proj == null ? null : fmt(proj), sub: 'monthly input', ach: proj == null ? null : cap(proj / 4) });
+    const scored = rows.filter(r => r.ach != null), wIn = scored.reduce((s, r) => s + r.w, 0);
+    const pts = scored.reduce((s, r) => s + r.w * r.ach, 0);
+    return { setup, rows, chs: chs.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
+  }
+
+  function viewKra() {
+    const M = S.M, me = S.user, isAdmin = me.role === 'admin';
+    const all = kraSetup();
+    // L&D see their own card; scoped viewers and SPOCs see cards for their locations; admin and PAN India viewers see all
+    const scope = me.access && me.access !== 'All' ? new Set([].concat(me.access).map(x => String(x).toUpperCase())) : null;
+    const mine = all.filter(s => s.trainer.toLowerCase() === String(me.name).toLowerCase());
+    const shown = me.role === 'trainer' && mine.length ? mine : scope ? all.filter(s => s.locs.some(l => scope.has(l))) : all;
+    const cards = shown.map(kraCalc);
+    const stat = a => (a == null ? 'neutral' : a >= 0.9 ? 'good' : a >= 0.6 ? 'warn' : 'bad');
+    const scoreTxt = c => (c.score == null ? '–' : `${fmt(c.score * 100, 0)}%`);
+    const knownLocs = Array.from(new Set(M.scoped.map(c => String(c.loc).toUpperCase()))).sort();
+    const owned = new Set([].concat(...all.map(s => s.locs)));
+    const unowned = knownLocs.filter(l => !owned.has(l));
+    $('#main').innerHTML = `
+      <div class="view-head"><div><h1>KRA Scorecard</h1><p class="muted">${esc(M.fyLabel)} to date · each L&amp;D is measured on the chauffeurs of their locations, whoever delivered the training</p></div></div>
+      ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Score = weighted achievement of the KPIs that have data</p></div>${table('kra-sum', [
+        { key: 'trainer', label: 'L&D' }, { key: 'locs', label: 'Locations' }, { key: 'chs', label: 'Chauffeurs', n: 1, fmt: r => fmt(r.chs) },
+        { key: 'cov', label: 'Trained ≥ 4 hrs', n: 1 }, { key: 'fb', label: 'Feedback', n: 1, fmt: r => esc(r.fb || '–') },
+        { key: 'wIn', label: 'Weightage with data', n: 1, fmt: r => `${fmt(r.wIn, 1)}%` }, { key: 'score', label: 'Score', n: 1, fmt: r => `<span class="pill ${stat(r.score)}">${r.score == null ? '–' : fmt(r.score * 100, 0) + '%'}</span>` }
+      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, cov: c.rows[0].actual || '–', fb: c.rows[3].actual, wIn: c.wIn, score: c.score })), { sortKey: 'score', sortDir: 'desc' })}</section>` : ''}
+      ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
+          <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 1)}% of the weightage${c.wIn < 100 ? ' (KPIs without data are left out)' : ''}</p></div>
+        <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th><th class="n">Points</th></tr></thead><tbody>
+        ${c.rows.map(r => `<tr><td>${esc(r.kra)}</td><td>${esc(r.kpi)}${r.sub ? `<br><small class="muted">${esc(r.sub)}</small>` : ''}</td><td class="n">${fmt(r.w, 1)}%</td><td>${esc(r.target)}</td>
+          <td class="n">${r.actual == null ? '<span class="muted">no data</span>' : esc(r.actual)}</td><td class="n">${r.ach == null ? '–' : `<span class="pill ${stat(r.ach)}">${fmt(r.ach * 100, 0)}%</span>`}</td>
+          <td class="n">${r.ach == null ? '–' : fmt(r.w * r.ach, 1)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="2">Total</td><td class="n">100%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div></section>`).join('')
+        : '<section class="panel"><p class="empty">No KRA scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
+      <p class="note">Coverage (≥ ${KRA_HOURS} hrs) is compared with the target for the share of the year gone (88% × ${fyMonthsDone()} of 12 months). Feedback achievement is scaled down when fewer than 88% of attendees gave feedback. Incident reduction uses the duty and incident counts in the chauffeur master.</p>
+      ${isAdmin ? `<section class="panel" id="kra-in"><div class="panel-head"><h2>Monthly inputs</h2><p class="muted">Figures the tracker cannot calculate. Saved to the "KRA Inputs" tab of the Google Sheet.</p></div>
+        <div class="form-grid">${select('ki-tr', 'L&D', all.map(s => s.trainer), (S.kraIn && S.kraIn.tr) || all[0].trainer)}${select('ki-m', 'Month', M.months.filter(m => m <= todayIso().slice(0, 7)).map(m => [m, monthLabel(m)]), (S.kraIn && S.kraIn.m) || todayIso().slice(0, 7))}</div>
+        <div class="form-grid" id="ki-fields" style="margin-top:10px"></div>
+        <div class="actions" style="margin-top:10px"><button class="btn btn-primary" id="ki-save" type="button">Save month</button><span id="ki-msg" class="muted"></span></div></section>
+      <section class="panel"><div class="panel-head"><h2>Locations per L&amp;D</h2><p class="muted">One line per person: name, then locations separated by commas. Saved to the "KRA Setup" tab.</p></div>
+        <textarea id="ks-text" rows="6" style="font-family:inherit">${esc(all.map(s => `${s.trainer}: ${s.locs.join(', ')}`).join('\n'))}</textarea>
+        ${unowned.length ? `<p class="note">Not assigned to anyone: ${esc(unowned.join(', '))}</p>` : ''}
+        <p class="note">Location names as in the master: ${esc(knownLocs.join(', '))}</p>
+        <div class="actions" style="margin-top:8px"><button class="btn btn-primary" id="ks-save" type="button">Save locations</button><span id="ks-msg" class="muted"></span></div></section>` : ''}`;
+    wireSort($('#main'), render);
+    if (!isAdmin) return;
+    const kin = S.kraIn = S.kraIn || {};
+    const fill = () => {
+      kin.tr = $('#ki-tr').value; kin.m = $('#ki-m').value;
+      const cur = kraInputs(kin.tr)[kin.m] || {};
+      $('#ki-fields').innerHTML = KRA_IN.map(k => `<div class="field"><label for="ki-${k.key}">${esc(k.label)}${k.unit ? ' (' + k.unit + ')' : ''}</label><input id="ki-${k.key}" inputmode="decimal" value="${cur[k.key] == null ? '' : esc(cur[k.key])}"></div>`).join('');
+      $('#ki-msg').textContent = Object.keys(cur).length ? 'Saved figures loaded' : '';
+    };
+    $('#ki-tr').onchange = fill; $('#ki-m').onchange = fill; fill();
+    const saveKra = async (payload, msgEl, done) => {
+      if (!M.d.kra) { $(msgEl).innerHTML = '<span class="form-error">Update the Apps Script first (see the README), then refresh.</span>'; return; }
+      $(msgEl).textContent = 'Saving…';
+      try { const out = await api('saveKra', payload); M.d.kra = out.kra; toast(done); render(); }
+      catch (err) { if (err.message !== 'AUTH') $(msgEl).innerHTML = `<span class="form-error">${esc(err.message)}</span>`; }
+    };
+    $('#ki-save').onclick = () => saveKra({ input: { month: kin.m, trainer: kin.tr, values: KRA_IN.map(k => $('#ki-' + k.key).value.trim()) } }, '#ki-msg', `Saved ${monthLabel(kin.m)} for ${kin.tr}`);
+    $('#ks-save').onclick = () => {
+      const setup = $('#ks-text').value.split('\n').map(l => l.split(':')).filter(p => p.length > 1 && p[0].trim()).map(p => [p[0].trim(), p.slice(1).join(':')]);
+      const bad = [].concat(...setup.map(s => s[1].split(',').map(x => x.trim().toUpperCase()).filter(Boolean))).filter(l => !knownLocs.includes(l));
+      if (bad.length && !confirm(`These locations are not in the master: ${bad.join(', ')}. Save anyway?`)) return;
+      saveKra({ setup }, '#ks-msg', 'Locations saved');
+    };
   }
 
   /* ---------------------------------------------------------------- Add training */
