@@ -802,11 +802,8 @@
     ['Shashank Chander', 'GURUGRAM, KAPASHERA, NOIDA, KOLKATA, LUCKNOW & KANPUR, JAIPUR, CHANDIGARH, GUWAHATI, BHUBANESHWAR, PATNA, OTHER CITIES']
   ];
   // manual inputs, in the order of the KRA Inputs columns after Month and L&D
-  const KRA_IN = [
-    { key: 'planned', label: 'Sessions planned', unit: '' }, { key: 'eng', label: 'Engagement programmes executed', unit: '%' },
-    { key: 'assess', label: 'Post-training assessment improvement', unit: '%' }, { key: 'report', label: 'Reports submitted on time', unit: '%' },
-    { key: 'lms', label: 'Training hours tracked via LMS', unit: '%' }, { key: 'proj', label: 'Special projects completed', unit: '' }
-  ];
+  // only the plan is entered by hand; the other KRA Inputs columns are not CCR chauffeur KPIs and stay unused
+  const KRA_IN = [{ key: 'planned', label: 'Sessions planned', unit: '' }];
   const KRA_HOURS = 4;
 
   function kraSetup() {
@@ -830,7 +827,6 @@
     const atts = M.fyAtt.filter(a => locs.has(String(a.loc).toUpperCase()));
     const inp = kraInputs(setup.trainer);
     const months = M.months.filter(m => m <= thisMonth && Object.prototype.hasOwnProperty.call(inp, m));
-    const avgIn = k => { const v = months.map(m => inp[m][k]).filter(x => x != null); return v.length ? avg(v) : null; };
     const sumIn = k => { const v = months.map(m => inp[m][k]).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) : null; };
     const cap = v => Math.max(0, Math.min(1, v));
     const rows = [];
@@ -847,30 +843,21 @@
       sub: planned ? `${fmt(held)} held of ${fmt(planned)} planned` : 'enter sessions planned', ach: planned ? cap(held / planned / 0.99) : null });
     // 3a: average rating, held back when fewer than 88% of attendees gave feedback
     const rated = atts.filter(a => a.rating != null), fb = rated.length ? avg(rated.map(a => a.rating)) : null, resp = atts.length ? rated.length / atts.length : null;
-    rows.push({ kra: '3. Training Program Effectiveness', kpi: 'Average chauffeur feedback (1–5), min. 88% response', w: 7.5, target: '4.5 · 88% response',
+    rows.push({ kra: '3. Training Program Effectiveness', kpi: 'Average chauffeur feedback (1–5), min. 88% response', w: 15, target: '4.5 · 88% response',
       actual: fb == null ? null : fmt(fb, 2), sub: resp == null ? '' : `response rate ${pctv(resp, 0)}`, ach: fb == null ? null : cap(fb / 4.5) * cap(resp / 0.88) });
-    const eng = avgIn('eng');
-    rows.push({ kra: '', kpi: 'Engagement programmes / Birthday / Shandaar Chauffeur executed', w: 7.5, target: '100%', actual: eng == null ? null : `${fmt(eng, 0)}%`, sub: 'monthly input', ach: eng == null ? null : cap(eng / 100) });
     // 4a: incidents per 1,000 duties this FY vs last FY (the master has incidents from FY 25-26)
     const col = re => M.extraCols.findIndex(h => re.test(h));
     const iPrev = col(/incident.*25-26/i), iCur = col(/incident.*26-27/i), dPrev = col(/duty.*25-26/i), dCur = col(/duty.*26-27/i);
     const tot = i => (i < 0 ? 0 : chs.reduce((s, c) => s + (Number(c.extra[i]) || 0), 0));
     const rPrev = tot(dPrev) ? tot(iPrev) / tot(dPrev) * 1000 : null, rCur = tot(dCur) ? tot(iCur) / tot(dCur) * 1000 : null;
     const red = rPrev && rCur != null ? (rPrev - rCur) / rPrev : null;
-    rows.push({ kra: '4. Training Impact & Incident Reduction', kpi: 'Reduction in incident rate vs FY 25-26', w: 7.5, target: '10% reduction',
+    rows.push({ kra: '4. Training Impact & Incident Reduction', kpi: 'Reduction in incident rate vs FY 25-26', w: 15, target: '10% reduction',
       actual: red == null ? null : `${fmt(red * 100, 1)}%`, sub: rPrev == null ? 'no duty data' : `${fmt(rCur, 2)} vs ${fmt(rPrev, 2)} per 1,000 duties`, ach: red == null ? null : cap(red / 0.10) });
-    const ass = avgIn('assess');
-    rows.push({ kra: '', kpi: 'Post-training assessment score improvement', w: 7.5, target: '15%', actual: ass == null ? null : `${fmt(ass, 1)}%`, sub: 'monthly input', ach: ass == null ? null : cap(ass / 15) });
-    const rep = avgIn('report');
-    rows.push({ kra: '5. Reporting Standards & Governance', kpi: 'Observation reports (48 hrs) + trackers & L&D records on time', w: 10, target: '95%', actual: rep == null ? null : `${fmt(rep, 0)}%`, sub: 'monthly input', ach: rep == null ? null : cap(rep / 95) });
-    const lms = avgIn('lms');
-    rows.push({ kra: '6. LMS Adoption', kpi: 'Training hours delivered and tracked via LMS', w: 10, target: '60%', actual: lms == null ? null : `${fmt(lms, 0)}%`, sub: 'monthly input', ach: lms == null ? null : cap(lms / 60) });
-    const proj = sumIn('proj');
-    rows.push({ kra: '7. Special Projects', kpi: 'L&D special projects completed on time (incl. automation)', w: 5, target: '4 projects', actual: proj == null ? null : fmt(proj), sub: 'monthly input', ach: proj == null ? null : cap(proj / 4) });
     const scored = rows.filter(r => r.ach != null), wIn = scored.reduce((s, r) => s + r.w, 0);
     const pts = scored.reduce((s, r) => s + r.w * r.ach, 0);
     const uniq = chs.filter(c => c.n > 0).length;
-    return { setup, rows, chs: chs.length, uniq, hrsOk, fb, resp, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
+    const wAll = rows.reduce((s, r) => s + r.w, 0);
+    return { setup, rows, wAll, chs: chs.length, uniq, hrsOk, fb, resp, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
   }
 
   // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
@@ -952,17 +939,17 @@
         { key: 'hrs', label: 'Trained ≥ 4 hrs', n: 1, fmt: r => `${fmt(r.hrs)} <small class="muted">(${pct(r.hrs, r.chs, 1)})</small>` },
         { key: 'fb', label: 'Feedback', n: 1, fmt: r => (r.fb == null ? '–' : `${fmt(r.fb, 2)} <small class="muted">(${pctv(r.resp, 0)} resp.)</small>`) },
         { key: 'cov', label: 'Coverage %', n: 1, fmt: r => (r.cov == null ? '–' : covPill(r.cov)) },
-        { key: 'wIn', label: 'Weightage (KRA)', n: 1, title: 'KRA weightage of the KPIs that have data, out of 100', fmt: r => `${fmt(r.wIn, 1)} of 100` },
+        { key: 'wIn', label: 'Weightage (KRA)', n: 1, title: 'KRA weightage of the CCR chauffeur KPIs that have data', fmt: r => `${fmt(r.wIn, 0)} of ${fmt(r.wAll, 0)}` },
         { key: 'pts', label: 'Achievement', n: 1, title: 'KRA points earned (share of the weightage with data)', fmt: r => `<span class="pill ${stat(r.score)}">${fmt(r.pts, 1)} / ${fmt(r.wIn, 1)}</span> <small class="muted">${r.score == null ? '' : fmt(r.score * 100, 0) + '%'}</small>` }
       ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, uniq: c.uniq, hrs: c.hrsOk, fb: c.fb, resp: c.resp,
-        cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, pts: c.pts, score: c.score })), { sortKey: 'pts', sortDir: 'desc' })}</section>` : ''}
+        cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, wAll: c.wAll, pts: c.pts, score: c.score })), { sortKey: 'pts', sortDir: 'desc' })}</section>` : ''}
       ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
-          <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 1)}% of the weightage${c.wIn < 100 ? ' (KPIs without data are left out)' : ''}</p></div>
+          <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 0)}% of the ${fmt(c.wAll, 0)}% CCR chauffeur weightage${c.wIn < c.wAll ? ' (KPIs without data are left out)' : ''}</p></div>
         <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th><th class="n">Points</th></tr></thead><tbody>
         ${c.rows.map(r => `<tr><td>${esc(r.kra)}</td><td>${esc(r.kpi)}${r.sub ? `<br><small class="muted">${esc(r.sub)}</small>` : ''}</td><td class="n">${fmt(r.w, 1)}%</td><td>${esc(r.target)}</td>
           <td class="n">${r.actual == null ? '<span class="muted">no data</span>' : esc(r.actual)}</td><td class="n">${r.ach == null ? '–' : `<span class="pill ${stat(r.ach)}">${fmt(r.ach * 100, 0)}%</span>`}</td>
           <td class="n">${r.ach == null ? '–' : fmt(r.w * r.ach, 1)}</td></tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="2">Total</td><td class="n">100%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div></section>`).join('')
+        <tfoot><tr><td colspan="2">Total</td><td class="n">${fmt(c.wAll, 0)}%</td><td></td><td></td><td></td><td class="n">${fmt(c.pts, 1)} of ${fmt(c.wIn, 1)}</td></tr></tfoot></table></div></section>`).join('')
         : '<section class="panel"><p class="empty">No KRA scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
       <p class="note">Coverage (≥ ${KRA_HOURS} hrs) is compared with the target for the share of the year gone (88% × ${fyMonthsDone()} of 12 months). Feedback achievement is scaled down when fewer than 88% of attendees gave feedback. Incident reduction uses the duty and incident counts in the chauffeur master.</p>
       ${isAdmin ? checksPanel() : ''}
