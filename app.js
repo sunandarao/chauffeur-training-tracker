@@ -799,7 +799,7 @@
     ['Rohan Kothekar', 'MUMBAI, MUMBAI MODULAR, PUNE, AHMEDABAD, CHAKAN, NAGPUR, INDORE'],
     ['Charan Kumar', 'BANGALORE, HYDERABAD'],
     ['James Samuel', 'CHENNAI, COIMBATORE, COCHIN'],
-    ['Shashank Chander', 'NOIDA, KOLKATA, LUCKNOW & KANPUR, JAIPUR, CHANDIGARH, GUWAHATI, BHUBANESHWAR, PATNA, OTHER CITIES']
+    ['Shashank Chander', 'GURUGRAM, KAPASHERA, NOIDA, KOLKATA, LUCKNOW & KANPUR, JAIPUR, CHANDIGARH, GUWAHATI, BHUBANESHWAR, PATNA, OTHER CITIES']
   ];
   // manual inputs, in the order of the KRA Inputs columns after Month and L&D
   const KRA_IN = [
