@@ -869,7 +869,8 @@
     rows.push({ kra: '7. Special Projects', kpi: 'L&D special projects completed on time (incl. automation)', w: 5, target: '4 projects', actual: proj == null ? null : fmt(proj), sub: 'monthly input', ach: proj == null ? null : cap(proj / 4) });
     const scored = rows.filter(r => r.ach != null), wIn = scored.reduce((s, r) => s + r.w, 0);
     const pts = scored.reduce((s, r) => s + r.w * r.ach, 0);
-    return { setup, rows, chs: chs.length, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
+    const uniq = chs.filter(c => c.n > 0).length;
+    return { setup, rows, chs: chs.length, uniq, hrsOk, fb, resp, wIn, pts, score: wIn ? pts / wIn : null, months: months.length };
   }
 
   // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
@@ -944,11 +945,17 @@
     const unowned = knownLocs.filter(l => !owned.has(l));
     $('#main').innerHTML = `
       <div class="view-head"><div><h1>KRA Scorecard</h1><p class="muted">${esc(M.fyLabel)} to date · each L&amp;D is measured on the chauffeurs of their locations, whoever delivered the training</p></div></div>
-      ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Score = weighted achievement of the KPIs that have data</p></div>${table('kra-sum', [
-        { key: 'trainer', label: 'L&D' }, { key: 'locs', label: 'Locations' }, { key: 'chs', label: 'Chauffeurs', n: 1, fmt: r => fmt(r.chs) },
-        { key: 'cov', label: 'Trained ≥ 4 hrs', n: 1 }, { key: 'fb', label: 'Feedback', n: 1, fmt: r => esc(r.fb || '–') },
-        { key: 'wIn', label: 'Weightage with data', n: 1, fmt: r => `${fmt(r.wIn, 1)}%` }, { key: 'score', label: 'Score', n: 1, fmt: r => `<span class="pill ${stat(r.score)}">${r.score == null ? '–' : fmt(r.score * 100, 0) + '%'}</span>` }
-      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, cov: c.rows[0].actual || '–', fb: c.rows[2].actual, wIn: c.wIn, score: c.score })), { sortKey: 'score', sortDir: 'desc' })}</section>` : ''}
+      ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Live from the training entries · achievement = KRA points earned on the KPIs that have data</p></div>${table('kra-sum', [
+        { key: 'trainer', label: 'L&D SPOC' }, { key: 'locs', label: 'Locations' },
+        { key: 'chs', label: 'Total chauffeurs', n: 1, fmt: r => fmt(r.chs) },
+        { key: 'uniq', label: 'Unique covered', n: 1, fmt: r => fmt(r.uniq) },
+        { key: 'hrs', label: 'Trained ≥ 4 hrs', n: 1, fmt: r => `${fmt(r.hrs)} <small class="muted">(${pct(r.hrs, r.chs, 1)})</small>` },
+        { key: 'fb', label: 'Feedback', n: 1, fmt: r => (r.fb == null ? '–' : `${fmt(r.fb, 2)} <small class="muted">(${pctv(r.resp, 0)} resp.)</small>`) },
+        { key: 'cov', label: 'Coverage %', n: 1, fmt: r => (r.cov == null ? '–' : covPill(r.cov)) },
+        { key: 'wIn', label: 'Weightage (KRA)', n: 1, title: 'KRA weightage of the KPIs that have data, out of 100', fmt: r => `${fmt(r.wIn, 1)} of 100` },
+        { key: 'pts', label: 'Achievement', n: 1, title: 'KRA points earned (share of the weightage with data)', fmt: r => `<span class="pill ${stat(r.score)}">${fmt(r.pts, 1)} / ${fmt(r.wIn, 1)}</span> <small class="muted">${r.score == null ? '' : fmt(r.score * 100, 0) + '%'}</small>` }
+      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, uniq: c.uniq, hrs: c.hrsOk, fb: c.fb, resp: c.resp,
+        cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, pts: c.pts, score: c.score })), { sortKey: 'pts', sortDir: 'desc' })}</section>` : ''}
       ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
           <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 1)}% of the weightage${c.wIn < 100 ? ' (KPIs without data are left out)' : ''}</p></div>
         <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th><th class="n">Points</th></tr></thead><tbody>
