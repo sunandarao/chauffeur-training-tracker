@@ -475,7 +475,7 @@
         { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage', cls: s.chauffeurs ? ({ good: 'good', warn: 'warn', bad: 'bad' })[covStatus(s.trained / s.chauffeurs)] : '', go: kGo.unique },
         { label: 'Chauffeurs in Scope', value: fmt(s.never), sub: pct(s.never, s.chauffeurs, 1) + ' of chauffeurs', cls: s.never ? 'bad' : '', go: kGo.never },
         { label: 'Attendees', value: fmt(s.attendances), sub: fmt(sessionsOf(atts)) + ' sessions', go: kGo.att },
-        { label: 'Manhours', value: fmt(s.hours, 0), sub: fmt(s.avgHours, 1) + ' per trained chauffeur', cls: 'hours', go: kGo.hours },
+        { label: 'Manhours', value: fmt(s.hours, 0), sub: fmt(s.avgHours, 1) + ' hours per trained chauffeur', cls: 'hours', go: kGo.hours },
         { label: 'Feedback rating', value: s.rating == null ? '–' : fmt(s.rating, 2) + '<small class="of5">out of 5</small>', sub: fmt(s.responses) + ' responses (response rate ' + pct(s.responses, s.attendances) + ')', go: kGo.fb }
       ])}
       <div class="grid-2">
@@ -563,7 +563,7 @@
         { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage' + (natCov != null ? ` · PAN India ${pct(natTot[1], natTot[0], 1)}` : ''), cls: s.chauffeurs ? covStatus(s.trained / s.chauffeurs) : '', go: ['chauffeurs', { loc, st: 'Trained' }] },
         { label: 'Chauffeurs in Scope', value: fmt(s.never), sub: pct(s.never, s.chauffeurs, 1) + ' of chauffeurs', cls: s.never ? 'bad' : '', go: ['chauffeurs', { loc, st: 'Not trained' }] },
         { label: 'Attendees', value: fmt(s.attendances), sub: fmt(sessionsOf(atts)) + ' sessions', go: S.user.role === 'viewer' ? ['chauffeurs', { loc, st: 'Trained', sort: 'n' }] : ['entries', { loc, from: M.fyStart, to: M.fyEnd }] },
-        { label: 'Manhours', value: fmt(s.hours, 1), sub: fmt(s.avgHours, 1) + ' per trained chauffeur', cls: 'hours', go: ['chauffeurs', { loc, st: 'Trained', sort: 'hrs' }] },
+        { label: 'Manhours', value: fmt(s.hours, 1), sub: fmt(s.avgHours, 1) + ' hours per trained chauffeur', cls: 'hours', go: ['chauffeurs', { loc, st: 'Trained', sort: 'hrs' }] },
         { label: 'Feedback rating', value: s.rating == null ? '–' : fmt(s.rating, 2) + '<small class="of5">out of 5</small>', sub: `${fmt(s.responses)} responses (response rate ${pct(s.responses, s.attendances)})`, go: ['feedback', { loc }] }
       ])}
       <div class="grid-2">
