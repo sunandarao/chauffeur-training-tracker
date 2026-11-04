@@ -1145,7 +1145,10 @@
       let rows;
       try {
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+        // use the "Entries" sheet, else the first sheet with Date + Code headers, else the first sheet
+        const rowsOf = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' });
+        const hasHead = n => rowsOf(n).slice(0, 15).some(r => r.some(c => /date/i.test(String(c))) && r.some(c => /code/i.test(String(c))));
+        rows = rowsOf(wb.SheetNames.find(n => /^entries$/i.test(n.trim())) || wb.SheetNames.find(hasHead) || wb.SheetNames[0]);
       } catch (err) { out.innerHTML = '<p class="form-error">Could not read that file. Use .xlsx, .xls or .csv.</p>'; return; }
       const hi = rows.findIndex(r => r.some(c => /date/i.test(String(c))) && r.some(c => /code|(^|[^a-z])id([^a-z]|$)/i.test(String(c))));
       if (hi < 0) { out.innerHTML = '<p class="form-error">No header row found. The file needs at least "Date" and "Chauffeur Code" columns (use Download template).</p>'; return; }
