@@ -807,7 +807,7 @@
     { key: 'assess', label: 'Post-training assessment improvement', unit: '%' }, { key: 'report', label: 'Reports submitted on time', unit: '%' },
     { key: 'lms', label: 'Training hours tracked via LMS', unit: '%' }, { key: 'proj', label: 'Special projects completed', unit: '' }
   ];
-  const INDUCTION_RE = /induction/i, KRA_HOURS = 4, NEW_HIRE_DAYS = 7;
+  const KRA_HOURS = 4;
 
   function kraSetup() {
     const s = (S.M.d.kra && S.M.d.kra.setup) || [];
@@ -823,7 +823,6 @@
     });
     return out;
   }
-  const isoPlus = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(y, m - 1, d + days); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
 
   function kraCalc(setup) {
     const M = S.M, locs = new Set(setup.locs), today = todayIso(), thisMonth = today.slice(0, 7);
@@ -840,16 +839,11 @@
     const pro = 0.88 * fyElapsed();
     rows.push({ kra: '1. Training Coverage & Capability Building', kpi: `CCR chauffeurs trained ≥ ${KRA_HOURS} hrs (0.5 man-day)`, w: 35, target: `88% by Mar · ${fmt(pro * 100, 1)}% by now`,
       actual: cov4 == null ? null : `${fmt(cov4 * 100, 1)}%`, sub: `${fmt(hrsOk)} of ${fmt(chs.length)} · unique coverage ${pct(chs.filter(c => c.n > 0).length, chs.length, 1)}`, ach: cov4 == null || !pro ? null : cap(cov4 / pro) });
-    // 2a: new joiners this FY (at least 7 days ago) with an induction by day 7
-    const joiners = chs.filter(c => c.doj && c.doj >= M.fyStart && isoPlus(c.doj, NEW_HIRE_DAYS) <= today);
-    const inducted = joiners.filter(c => c.att.some(a => INDUCTION_RE.test(a.module) && a.date <= isoPlus(c.doj, NEW_HIRE_DAYS)));
-    rows.push({ kra: '2. Onboarding & Chauffeur Engagement', kpi: `New hires inducted within ${NEW_HIRE_DAYS} days of joining`, w: 5, target: '99%',
-      actual: joiners.length ? pct(inducted.length, joiners.length, 1) : null, sub: joiners.length ? `${fmt(inducted.length)} of ${fmt(joiners.length)} joiners` : 'no joiners with a date of joining', ach: joiners.length ? cap(inducted.length / joiners.length / 0.99) : null });
-    // 2b: sessions held at the locations in the months that have a plan
+    // 2: sessions held at the locations in the months that have a plan (employee onboarding is not tracked here)
     const planned = sumIn('planned');
     const planMonths = new Set(months.filter(m => inp[m].planned != null));
     const held = new Set(atts.filter(a => planMonths.has(a.date.slice(0, 7))).map(a => `${a.date}|${a.module}|${a.trainer}`)).size;
-    rows.push({ kra: '', kpi: 'Sessions conducted ÷ planned', w: 5, target: '99%', actual: planned ? pct(held, planned, 0) : null,
+    rows.push({ kra: '2. Onboarding & Chauffeur Engagement', kpi: 'Sessions conducted ÷ planned', w: 10, target: '99%', actual: planned ? pct(held, planned, 0) : null,
       sub: planned ? `${fmt(held)} held of ${fmt(planned)} planned` : 'enter sessions planned', ach: planned ? cap(held / planned / 0.99) : null });
     // 3a: average rating, held back when fewer than 88% of attendees gave feedback
     const rated = atts.filter(a => a.rating != null), fb = rated.length ? avg(rated.map(a => a.rating)) : null, resp = atts.length ? rated.length / atts.length : null;
@@ -897,7 +891,7 @@
         { key: 'trainer', label: 'L&D' }, { key: 'locs', label: 'Locations' }, { key: 'chs', label: 'Chauffeurs', n: 1, fmt: r => fmt(r.chs) },
         { key: 'cov', label: 'Trained ≥ 4 hrs', n: 1 }, { key: 'fb', label: 'Feedback', n: 1, fmt: r => esc(r.fb || '–') },
         { key: 'wIn', label: 'Weightage with data', n: 1, fmt: r => `${fmt(r.wIn, 1)}%` }, { key: 'score', label: 'Score', n: 1, fmt: r => `<span class="pill ${stat(r.score)}">${r.score == null ? '–' : fmt(r.score * 100, 0) + '%'}</span>` }
-      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, cov: c.rows[0].actual || '–', fb: c.rows[3].actual, wIn: c.wIn, score: c.score })), { sortKey: 'score', sortDir: 'desc' })}</section>` : ''}
+      ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, cov: c.rows[0].actual || '–', fb: c.rows[2].actual, wIn: c.wIn, score: c.score })), { sortKey: 'score', sortDir: 'desc' })}</section>` : ''}
       ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
           <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs · score on ${fmt(c.wIn, 1)}% of the weightage${c.wIn < 100 ? ' (KPIs without data are left out)' : ''}</p></div>
         <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th><th class="n">Points</th></tr></thead><tbody>
