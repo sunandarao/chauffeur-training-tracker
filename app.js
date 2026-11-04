@@ -869,8 +869,8 @@
   // Sessions worth checking against the physical attendance sheets (admin). A flag is a reason to look, not a finding.
   const CHECK_LATE_DAYS = 7, CHECK_REPEAT_DAYS = 30;
   function sessionChecks() {
-    const M = S.M, owner = {};
-    kraSetup().forEach(s => s.locs.forEach(l => { owner[l] = s.trainer; }));
+    const M = S.M, owner = {}, region = {};
+    kraSetup().forEach(s => { region[s.trainer.toLowerCase()] = new Set(s.locs); s.locs.forEach(l => { owner[l] = s.trainer; }); });
     const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
     const sessions = Array.from(groupBy(M.fyAtt, a => `${a.date}|${a.module}|${a.trainer}`).values());
     const sizes = {}; sessions.forEach(l => { (sizes[l[0].trainer] = sizes[l[0].trainer] || []).push(l.length); });
@@ -891,7 +891,11 @@
       if (list.length > big) flags.push(`large session (${list.length}; usual for this L&D ${median(sizes[a0.trainer])})`);
       const locs = Array.from(new Set(list.map(a => String(a.loc).toUpperCase())));
       const owners = new Set(locs.map(l => owner[l] || l));
-      if (owners.size > 1) flags.push(`chauffeurs from ${locs.length} locations: ${locs.join(', ')}`);
+      // an L&D with a region trains only there (the L&D Head and outside trainers have no region and travel)
+      const own = region[String(a0.trainer).toLowerCase()];
+      const away = own ? list.filter(a => a.c && !own.has(String(a.loc).toUpperCase())) : [];
+      if (away.length) flags.push(`${away.length} chauffeur(s) outside ${a0.trainer}'s region: ${Array.from(new Set(away.map(a => `${a.code} (${a.loc})`))).slice(0, 4).join(', ')}${away.length > 4 ? '…' : ''}`);
+      else if (owners.size > 1) flags.push(`chauffeurs from ${locs.length} locations: ${locs.join(', ')}`);
       if ('sheets' in M.d && a0.date >= SHEETS_FROM && !scans.has(sheetKey(a0.date, a0.module, a0.trainer))) flags.push('no signed sheet uploaded');
       return { key: `${a0.date}|${a0.module}|${a0.trainer}`, date: a0.date, module: a0.module, trainer: a0.trainer, by: Array.from(new Set(list.map(a => a.by).filter(Boolean))).join(', '),
         n: list.length, locs: locs.join(', '), flags, nf: flags.length, list };
