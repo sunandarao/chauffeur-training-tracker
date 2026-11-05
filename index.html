@@ -8,47 +8,85 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=202610101000">
+<link rel="stylesheet" href="styles.css?v=202611051000">
 </head>
 <body>
 
-<!-- Login -->
+<!-- Login: cover panel (programme story + links for people without a login) and the sign-in panel -->
 <section id="login-view" class="login" hidden>
-  <form id="login-form" class="login-card" autocomplete="on">
-    <img src="logo.webp" alt="ECO Mobility" class="logo logo-lg">
-    <div class="brand brand-lg"><span>CCR Chauffeur L&amp;D Tracker</span></div>
-    <p class="muted">Sign in with the email and password your admin gave you.</p>
-    <label for="login-email">Email</label>
-    <input id="login-email" type="email" required autocomplete="username">
-    <label for="login-password">Password</label>
-    <input id="login-password" type="password" required autocomplete="current-password">
-    <button id="login-btn" class="btn btn-primary" type="submit">Sign in</button>
-    <p id="login-error" class="form-error" role="alert"></p>
-    <button type="button" class="linkbtn" id="forgot-btn">Forgot password?</button>
-  </form>
-  <form id="reset-form" class="login-card" autocomplete="on" hidden>
-    <img src="logo.webp" alt="ECO Mobility" class="logo logo-lg">
-    <div class="brand brand-lg"><span>Set a new password</span></div>
-    <div id="rs-step1">
-      <p class="muted">Enter the email you sign in with. We will email you a 6-digit code.</p>
-      <label for="rs-email">Email</label>
-      <input id="rs-email" type="email" autocomplete="username">
-      <button id="rs-send" class="btn btn-primary" type="button">Email me a code</button>
+  <div class="cover">
+    <div class="cover-in">
+      <p class="cover-eyebrow">CCR &middot; Chauffeur Learning &amp; Development</p>
+      <h1 class="cover-title">Every chauffeur.<br>Trained, tracked, <em>trusted.</em></h1>
+      <p class="cover-lead">Plan sessions, record attendance, collect feedback and follow every chauffeur's training across India, in one place.</p>
+      <ol class="cover-steps">
+        <li><b>01</b><span>Train</span></li>
+        <li><b>02</b><span>Record</span></li>
+        <li><b>03</b><span>Feedback</span></li>
+        <li><b>04</b><span>Improve</span></li>
+      </ol>
+      <div class="cover-links">
+        <a class="cover-btn" href="feedback.html">Give training feedback <span aria-hidden="true">&rarr;</span></a>
+        <a class="cover-btn ghost" id="access-link" href="mailto:">Request access</a>
+      </div>
+      <p class="cover-note">Chauffeurs: share your feedback after a session, no login needed.</p>
     </div>
-    <div id="rs-step2" hidden>
-      <p class="ok-box" id="rs-sent"></p>
-      <label for="rs-code">6-digit code</label>
-      <input id="rs-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456">
-      <label for="rs-pw">New password</label>
-      <input id="rs-pw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
-      <label for="rs-pw2">New password again</label>
-      <input id="rs-pw2" type="password" autocomplete="new-password">
-      <button id="rs-save" class="btn btn-primary" type="submit">Set password and sign in</button>
-      <button type="button" class="linkbtn" id="rs-resend">Send a new code</button>
+    <svg class="road" viewBox="0 0 1000 140" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <path id="road-path" d="M-20 50 H430 C470 50 478 56 488 84 C498 112 506 118 548 118 H1020" fill="none" stroke="#e8424f" stroke-width="2.5" stroke-dasharray="7 6"/>
+      <g class="car">
+        <g transform="translate(-27 -12)">
+          <rect x="0" y="0" width="54" height="24" rx="9" fill="#3b4a55"/>
+          <rect x="12" y="3" width="20" height="18" rx="5" fill="#9fb3bf"/>
+          <rect x="35" y="4" width="9" height="16" rx="3" fill="#6f8796"/>
+          <rect x="49" y="3" width="4" height="5" rx="2" fill="#ffd66b"/><rect x="49" y="16" width="4" height="5" rx="2" fill="#ffd66b"/>
+          <rect x="0" y="3" width="3" height="5" rx="1" fill="#ff4d5a"/><rect x="0" y="16" width="3" height="5" rx="1" fill="#ff4d5a"/>
+        </g>
+        <animateMotion dur="14s" repeatCount="indefinite" rotate="auto"><mpath href="#road-path"/></animateMotion>
+      </g>
+    </svg>
+  </div>
+
+  <div class="signin">
+    <div class="signin-in">
+      <img src="logo.webp" alt="ECO Mobility" class="signin-logo">
+      <p class="signin-eyebrow">CCR Chauffeur L&amp;D Tracker</p>
+      <form id="login-form" class="signin-form" autocomplete="on">
+        <h2>Welcome back.</h2>
+        <p class="muted">Sign in to see your training dashboard.</p>
+        <label for="login-email">Work email address</label>
+        <input id="login-email" type="email" required autocomplete="username" placeholder="name@ecosmobility.com">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" required autocomplete="current-password">
+        <button id="login-btn" class="btn btn-primary" type="submit">Sign in <span aria-hidden="true">&rarr;</span></button>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <button type="button" class="linkbtn" id="forgot-btn">Forgot password?</button>
+      </form>
+      <form id="reset-form" class="signin-form" autocomplete="on" hidden>
+        <h2>Set a new password</h2>
+        <div id="rs-step1">
+          <p class="muted">Enter the email you sign in with. We will email you a 6-digit code.</p>
+          <label for="rs-email">Work email address</label>
+          <input id="rs-email" type="email" autocomplete="username" placeholder="name@ecosmobility.com">
+          <button id="rs-send" class="btn btn-primary" type="button">Email me a code</button>
+        </div>
+        <div id="rs-step2" hidden>
+          <p class="ok-box" id="rs-sent"></p>
+          <label for="rs-code">6-digit code</label>
+          <input id="rs-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456">
+          <label for="rs-pw">New password</label>
+          <input id="rs-pw" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+          <label for="rs-pw2">New password again</label>
+          <input id="rs-pw2" type="password" autocomplete="new-password">
+          <button id="rs-save" class="btn btn-primary" type="submit">Set password and sign in</button>
+          <button type="button" class="linkbtn" id="rs-resend">Send a new code</button>
+        </div>
+        <p id="rs-error" class="form-error" role="alert"></p>
+        <button type="button" class="linkbtn" id="rs-back">Back to sign in</button>
+      </form>
+      <p class="signin-help">Access is limited to authorised L&amp;D users. For help, contact your administrator.</p>
     </div>
-    <p id="rs-error" class="form-error" role="alert"></p>
-    <button type="button" class="linkbtn" id="rs-back">Back to sign in</button>
-  </form>
+    <p class="signin-foot">ECOS (India) Mobility &amp; Hospitality Limited</p>
+  </div>
 </section>
 
 <!-- App -->
@@ -84,10 +122,10 @@
 <aside id="drawer" class="drawer" hidden aria-modal="true" role="dialog"></aside>
 <div id="toast" class="toast" role="status" hidden></div>
 
-<script src="config.js?v=202610101000"></script>
+<script src="config.js?v=202611051000"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="app.js?v=202611050700"></script>
+<script src="app.js?v=202611051000"></script>
 </body>
 </html>

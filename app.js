@@ -147,6 +147,8 @@
     else setTimeout(() => $('#login-email').focus(), 50);
   };
   $('#forgot-btn').onclick = () => showReset(true);
+  { const to = (window.APP_CONFIG && window.APP_CONFIG.SUPPORT_EMAIL) || '';
+    if (to) $('#access-link').href = `mailto:${to}?subject=${encodeURIComponent('Access to the CCR Chauffeur L&D Tracker')}&body=${encodeURIComponent('Name:\nRole:\nLocation(s):\n')}`; else $('#access-link').hidden = true; }
   $('#rs-back').onclick = () => showReset(false);
   const sendCode = async () => {
     const btn = $('#rs-send'); btn.disabled = true; btn.textContent = 'Sending…'; $('#rs-error').textContent = '';
