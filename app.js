@@ -115,6 +115,11 @@
   const sessionsOf = atts => new Set(atts.map(a => a.date + '|' + a.module + '|' + a.loc + '|' + a.trainer)).size;
 
   /* ---------------------------------------------------------------- shell */
+  // KRA scorecards: admins named in config.js KRA_VIEWERS (the L&D Head), or every admin when the list is empty
+  function canKra() {
+    const u = S.user || {}, list = ((window.APP_CONFIG && window.APP_CONFIG.KRA_VIEWERS) || []).map(e => String(e).toLowerCase());
+    return u.role === 'admin' && (!list.length || list.includes(String(u.email || '').toLowerCase()));
+  }
   function showLogin(msg) {
     $('#app-view').hidden = true; $('#login-view').hidden = false; $('#reset-form').hidden = true; $('#login-form').hidden = false;
     $('#login-error').textContent = msg || '';
@@ -241,6 +246,7 @@
     const spoc = d.me.role === 'spoc';
     $('#me-name').textContent = d.me.name + (d.me.role === 'admin' ? ' · Admin' : viewer ? ' · View only' : spoc ? ' · L&D SPOC' : '');
     $('#admin-tab').hidden = d.me.role !== 'admin';
+    $('#kra-tab').hidden = !canKra();
     $('#account-btn').hidden = false;
     $('#fbqr-btn').hidden = viewer;
     $$('#tabs [data-view="add"], #tabs [data-view="entries"]').forEach(b => { b.hidden = viewer; });
@@ -350,6 +356,7 @@
   function render() {
     if (!S.M) return;
     if (S.view === 'admin' && S.user.role !== 'admin') S.view = 'dashboard';
+    if (S.view === 'kra' && !canKra()) S.view = 'dashboard';
     if ((S.view === 'add' || S.view === 'entries') && S.user.role === 'viewer') S.view = 'dashboard';
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === S.view));
     destroyCharts();
