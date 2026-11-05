@@ -863,7 +863,7 @@ function otpRequest_(p) {
   var code = ('00000' + (parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000)).slice(-6);
   cache.put('ocode_' + email, hash_(code, 'otp|' + email), OTP_MINUTES * 60);
   cache.remove('otry_' + email);
-  var app = String(settings_()['App Name'] || 'CCR Chauffeur L&D Tracker');
+  var app = String(settings_()['App Name'] || 'Chauffeured Car Rentals L&D Chauffeur Tracker');
   MailApp.sendEmail({
     to: email,
     name: app,
@@ -909,7 +909,7 @@ function resetRequest_(p) {
   var code = ('00000' + (parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000)).slice(-6);
   cache.put('rcode_' + email, hash_(code, 'reset|' + email), RESET_MINUTES * 60);
   cache.remove('rtry_' + email);
-  var app = String(settings_()['App Name'] || 'CCR Chauffeur L&D Tracker');
+  var app = String(settings_()['App Name'] || 'Chauffeured Car Rentals L&D Chauffeur Tracker');
   MailApp.sendEmail({
     to: email,
     name: app,

@@ -3,33 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CCR Chauffeur L&amp;D Tracker</title>
+<title>Chauffeured Car Rentals L&amp;D Chauffeur Tracker</title>
 <link rel="icon" href="logo.webp" type="image/webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=202611051900">
+<link rel="stylesheet" href="styles.css?v=202611052200">
 </head>
 <body>
 
-<!-- Login: soft background, sign-in card in the middle, module badges and links for people without a login -->
-<section id="login-view" class="login lw" hidden>
-  <div class="lw-in">
-    <p class="lw-top">CCR &middot; Chauffeur Learning &amp; Development</p>
-    <div class="lw-main">
-    <div class="lw-collage" aria-label="Chauffeur training sessions and this month's training calendar">
-      <a class="ph ph-cal" href="img/calendar.jpg" target="_blank" rel="noopener" title="Open this month's training calendar"><img src="img/calendar.jpg" alt="This month's CCR chauffeur training calendar"><span class="cap">This month's training calendar &middot; tap to open</span></a>
-      <figure class="ph p1"><img src="img/training-2.jpg" alt="Chauffeurs in a White Gloves classroom session"><figcaption>White Gloves Training</figcaption></figure>
-      <figure class="ph p2"><img src="img/training-6.jpg" alt="Chauffeur using a fire extinguisher in a practical drill"><figcaption>Fire safety drill</figcaption></figure>
-      <figure class="ph p3"><img src="img/training-4.jpg" alt="Trainer presenting to chauffeurs around a table"><figcaption>Service excellence</figcaption></figure>
-      <figure class="ph p4"><img src="img/training-5.jpg" alt="Trainer explaining a video to a small group of chauffeurs"><figcaption>Small-group coaching</figcaption></figure>
-      <figure class="ph p5"><img src="img/training-1.jpg" alt="Trainer explaining the chauffeur details card"><figcaption>In the classroom</figcaption></figure>
-      <figure class="ph p6"><img src="img/training-3.jpg" alt="Chauffeurs following a presentation on eye contact"><figcaption>Every gesture counts</figcaption></figure>
-      <figure class="ph p7"><img src="img/training-7.jpg" alt="Online training session with chauffeurs joining by video"><figcaption>Virtual sessions, PAN India</figcaption></figure>
+<!-- Sign-in: a public landing page (hero, calendar, gallery) with the sign-in card in the hero -->
+<section id="login-view" class="login lp" hidden>
+  <header class="lp-nav">
+    <a class="lp-brand" href="#lp-top"><img src="logo.webp" alt="ECO Mobility"><span>Chauffeured Car Rentals<small>L&amp;D Chauffeur Tracker</small></span></a>
+    <nav class="lp-links" aria-label="Page"><a href="#lp-cal">Training calendar</a><a href="#lp-gal">Gallery</a><a class="lp-pill" href="feedback.html">Give feedback</a></nav>
+  </header>
+
+  <div class="lp-hero" id="lp-top">
+    <div class="lp-copy">
+      <p class="lp-eyebrow"><span class="dot" aria-hidden="true"></span>ECO Mobility &middot; Learning &amp; Development</p>
+      <h1><span class="nb">Chauffeured Car Rentals</span> <span>L&amp;D Chauffeur Tracker</span></h1>
+      <p class="lp-lead">Every chauffeur, <b>trained, tracked and trusted</b>, across India. Training sessions, attendance, feedback and coverage for every location, in one place.</p>
+      <div class="lp-ctas">
+        <a class="lp-btn" href="feedback.html">Give training feedback <span aria-hidden="true">&rarr;</span></a>
+        <a class="lp-btn ghost" href="#lp-cal">This month's calendar</a>
+      </div>
+      <ul class="lp-mods" aria-label="Training modules">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V7z"/></svg>Smart Chauffeur Induction</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 6.3L21 9l-5 4.4L17.5 20 12 16.7 6.5 20 8 13.4 3 9l6.4-.7z"/></svg>SMART Chauffeur Training</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm0-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 10h5.6M14.9 10h5.6M12 15v6"/></svg>Defensive Driving</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21v-8l-2-3V6a1.5 1.5 0 0 1 3 0v4V4.5a1.5 1.5 0 0 1 3 0V10 3.5a1.5 1.5 0 0 1 3 0V10 5a1.5 1.5 0 0 1 3 0v8l-2 4v4z"/></svg>White Gloves</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/></svg>First Aid</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Respect First</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4l2 3v11H7V10l2-3z"/></svg>Grooming &amp; Hygiene</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>English Session</li>
+      </ul>
     </div>
-    <div class="signin-card">
-      <img src="logo.webp" alt="ECO Mobility" class="signin-logo">
-      <p class="signin-eyebrow">CCR Chauffeur L&amp;D Tracker</p>
+    <div class="lp-side">
+      <img class="lp-peek a" src="img/training-6.jpg" alt="" aria-hidden="true">
+      <img class="lp-peek b" src="img/training-2.jpg" alt="" aria-hidden="true">
+      <div class="signin-card">
+        <p class="signin-eyebrow">For L&amp;D team &amp; managers</p>
       <form id="login-form" class="signin-form" autocomplete="on">
         <h2>Welcome back.</h2>
         <p class="muted" id="lg-sub">Sign in to see your training dashboard.</p>
@@ -74,34 +88,38 @@
         <p id="rs-error" class="form-error" role="alert"></p>
         <button type="button" class="linkbtn" id="rs-back">Back to sign in</button>
       </form>
-      <p class="signin-help">Access is limited to authorised L&amp;D users. Need access? <a id="access-link" href="mailto:">Request it here</a>.</p>
-    </div>
-    </div>
-    <div class="lw-band">
-      <p class="lw-line">Every chauffeur, <b>trained, tracked and trusted</b>, across India.</p>
-      <ul class="lw-mods" aria-label="Training modules">
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V7z"/></svg>Smart Chauffeur Induction</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 6.3L21 9l-5 4.4L17.5 20 12 16.7 6.5 20 8 13.4 3 9l6.4-.7z"/></svg>SMART Chauffeur Training</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm0-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 10h5.6M14.9 10h5.6M12 15v6"/></svg>Defensive Driving</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21v-8l-2-3V6a1.5 1.5 0 0 1 3 0v4V4.5a1.5 1.5 0 0 1 3 0V10 3.5a1.5 1.5 0 0 1 3 0V10 5a1.5 1.5 0 0 1 3 0v8l-2 4v4z"/></svg>White Gloves</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/></svg>First Aid</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Respect First</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4l2 3v11H7V10l2-3z"/></svg>Grooming &amp; Hygiene</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>English Session</li>
-      </ul>
-      <div class="lw-links">
-      <a class="lw-fb" href="feedback.html"><span class="lw-fb-ico" aria-hidden="true">&#9733;</span><span><b>Chauffeur?</b> Share your feedback after a session</span><span aria-hidden="true">&rarr;</span></a>
+        <p class="signin-help">Access is limited to authorised users. Need access? <a id="access-link" href="mailto:">Request it here</a>.</p>
       </div>
     </div>
-    <p class="signin-foot">ECOS (India) Mobility &amp; Hospitality Limited</p>
   </div>
+
+  <section class="lp-sec lp-calsec" id="lp-cal">
+    <div class="lp-sec-head"><p class="lp-eyebrow">Plan ahead</p><h2>This month's training calendar</h2>
+      <p>Dates, modules and locations for every branch. Tap the calendar to open it full size.</p></div>
+    <a class="lp-cal" href="img/calendar.jpg" target="_blank" rel="noopener"><img src="img/calendar.jpg" alt="This month's CCR chauffeur training calendar" loading="lazy"></a>
+  </section>
+
+  <section class="lp-sec" id="lp-gal">
+    <div class="lp-sec-head"><p class="lp-eyebrow">Training in action</p><h2>From the classroom to the road</h2></div>
+    <div class="lp-gal">
+        <figure class="g g-wide"><img src="img/training-2.jpg" alt="Chauffeurs in a White Gloves classroom session" loading="lazy"><figcaption>White Gloves Training</figcaption></figure>
+        <figure class="g g-tall"><img src="img/training-6.jpg" alt="Chauffeur using a fire extinguisher in a practical drill" loading="lazy"><figcaption>Fire safety drill</figcaption></figure>
+        <figure class="g "><img src="img/training-4.jpg" alt="Trainer presenting to chauffeurs around a table" loading="lazy"><figcaption>Service excellence</figcaption></figure>
+        <figure class="g "><img src="img/training-5.jpg" alt="Trainer explaining a video to a small group of chauffeurs" loading="lazy"><figcaption>Small-group coaching</figcaption></figure>
+        <figure class="g "><img src="img/training-1.jpg" alt="Trainer explaining the chauffeur details card" loading="lazy"><figcaption>In the classroom</figcaption></figure>
+        <figure class="g "><img src="img/training-3.jpg" alt="Chauffeurs following a presentation on eye contact" loading="lazy"><figcaption>Every gesture counts</figcaption></figure>
+        <figure class="g "><img src="img/training-7.jpg" alt="Online training session with chauffeurs joining by video" loading="lazy"><figcaption>Virtual sessions, PAN India</figcaption></figure>
+    </div>
+  </section>
+
+  <footer class="lp-foot"><span>ECOS (India) Mobility &amp; Hospitality Limited</span><a href="feedback.html">Chauffeur feedback</a></footer>
 </section>
 
 <!-- App -->
 <div id="app-view" hidden>
   <div class="head-wrap">
   <header class="topbar">
-    <div class="brand"><button id="home-btn" class="home-btn" type="button" title="Go to Dashboard and refresh" aria-label="Go to Dashboard and refresh"><img src="logo.webp" alt="ECO Mobility" class="logo"><span class="brand-name"><span id="app-name">CCR Chauffeur L&amp;D Tracker</span></span></button><span id="fy-label" class="chip"></span><span id="scope-label" class="chip chip-scope" hidden></span></div>
+    <div class="brand"><button id="home-btn" class="home-btn" type="button" title="Go to Dashboard and refresh" aria-label="Go to Dashboard and refresh"><img src="logo.webp" alt="ECO Mobility" class="logo"><span class="brand-name"><span id="app-name">Chauffeured Car Rentals<small>L&amp;D Chauffeur Tracker</small></span></span></button><span id="fy-label" class="chip"></span><span id="scope-label" class="chip chip-scope" hidden></span></div>
     <div class="topbar-actions">
       <span id="sync-status" class="sync" title="Data status"></span>
       <button id="refresh-btn" class="btn btn-ghost" type="button">Refresh</button>
@@ -130,10 +148,10 @@
 <aside id="drawer" class="drawer" hidden aria-modal="true" role="dialog"></aside>
 <div id="toast" class="toast" role="status" hidden></div>
 
-<script src="config.js?v=202611051600"></script>
+<script src="config.js?v=202611052000"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="app.js?v=202611051800"></script>
+<script src="app.js?v=202611052000"></script>
 </body>
 </html>

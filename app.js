@@ -187,7 +187,7 @@
   };
   $('#forgot-btn').onclick = () => showReset(true);
   { const to = (window.APP_CONFIG && window.APP_CONFIG.SUPPORT_EMAIL) || '';
-    if (to) $('#access-link').href = `mailto:${to}?subject=${encodeURIComponent('Access to the CCR Chauffeur L&D Tracker')}&body=${encodeURIComponent('Name:\nRole:\nLocation(s):\n')}`; else $('#access-link').hidden = true; }
+    if (to) $('#access-link').href = `mailto:${to}?subject=${encodeURIComponent('Access to the Chauffeured Car Rentals L&D Chauffeur Tracker')}&body=${encodeURIComponent('Name:\nRole:\nLocation(s):\n')}`; else $('#access-link').hidden = true; }
   $('#rs-back').onclick = () => showReset(false);
   const sendCode = async () => {
     const btn = $('#rs-send'); btn.disabled = true; btn.textContent = 'Sending…'; $('#rs-error').textContent = '';
@@ -240,7 +240,8 @@
     let d;
     try { d = await api('data'); } finally { busy(false); }
     S.raw = d; S.M = buildModel(d); S.user = d.me; store.set(LS.user, JSON.stringify(d.me));
-    $('#app-name').textContent = (window.APP_CONFIG && window.APP_CONFIG.APP_NAME) || 'CCR Chauffeur L&D Tracker';
+    { const nm = (window.APP_CONFIG && window.APP_CONFIG.APP_NAME) || 'Chauffeured Car Rentals L&D Chauffeur Tracker', at = nm.indexOf(' L&D');
+      $('#app-name').innerHTML = at > 0 ? `${esc(nm.slice(0, at))}<small>${esc(nm.slice(at + 1))}</small>` : esc(nm); }
     $('#fy-label').textContent = S.M.fyLabel;
     const viewer = d.me.role === 'viewer';
     const spoc = d.me.role === 'spoc';
