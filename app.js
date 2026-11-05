@@ -118,26 +118,60 @@
   function showLogin(msg) {
     $('#app-view').hidden = true; $('#login-view').hidden = false; $('#reset-form').hidden = true; $('#login-form').hidden = false;
     $('#login-error').textContent = msg || '';
-    setTimeout(() => $('#login-email').focus(), 50);
+    lgView('otp'); // defined below; showLogin only runs after start-up
   }
   function logout(msg) {
     S.token = null; S.user = null; store.del(LS.token); store.del(LS.user);
     closeDrawer(); showLogin(msg);
   }
 
+  // Sign-in: an emailed 6-digit code by default (otp → code), or the password (pw) as a fallback.
+  const LG = { mode: 'otp' };
+  const lgView = (mode, msg) => {
+    LG.mode = mode;
+    const code = mode === 'code', pw = mode === 'pw';
+    $('#lg-code-wrap').hidden = !code; $('#lg-pw-wrap').hidden = !pw;
+    $('#login-email').readOnly = code;
+    $('#login-password').required = pw;
+    $('#login-btn').innerHTML = mode === 'otp' ? 'Send OTP <span aria-hidden="true">&rarr;</span>' : 'Sign in <span aria-hidden="true">&rarr;</span>';
+    $('#lg-sub').textContent = msg || (code ? 'Enter the code we emailed you.' : 'Sign in to see your training dashboard.');
+    $('#lg-resend').hidden = !code; $('#lg-other').hidden = !code;
+    $('#lg-mode').textContent = pw ? 'Sign in with an emailed code instead' : 'Sign in with password instead';
+    $('#forgot-btn').hidden = !pw;
+    setTimeout(() => (code ? $('#login-code') : pw && $('#login-email').value ? $('#login-password') : $('#login-email')).focus(), 50);
+  };
+  const signedIn = async out => {
+    S.token = out.token; S.user = { name: out.name, role: out.role, email: out.email };
+    store.set(LS.token, S.token); store.set(LS.user, JSON.stringify(S.user));
+    $('#login-password').value = ''; $('#login-code').value = '';
+    lgView('otp');
+    await start(true);
+  };
+  const askCode = async () => {
+    const out = await api('otpRequest', { email: $('#login-email').value.trim() });
+    lgView('code', out.message);
+  };
   $('#login-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const btn = $('#login-btn'); btn.disabled = true; btn.textContent = 'Signing in…'; $('#login-error').textContent = '';
+    const btn = $('#login-btn'), label = btn.innerHTML; btn.disabled = true; $('#login-error').textContent = '';
+    btn.textContent = LG.mode === 'otp' ? 'Sending…' : 'Signing in…';
     try {
-      const out = await api('login', { email: $('#login-email').value.trim(), password: $('#login-password').value });
-      S.token = out.token; S.user = { name: out.name, role: out.role, email: out.email };
-      store.set(LS.token, S.token); store.set(LS.user, JSON.stringify(S.user));
-      $('#login-password').value = '';
-      await start(true);
+      if (LG.mode === 'otp') await askCode();
+      else if (LG.mode === 'code') await signedIn(await api('otpLogin', { email: $('#login-email').value.trim(), code: $('#login-code').value }));
+      else await signedIn(await api('login', { email: $('#login-email').value.trim(), password: $('#login-password').value }));
     } catch (err) {
-      if (err.message !== 'AUTH') $('#login-error').textContent = err.message;
-    } finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+      // an Apps Script without the code sign-in answers as if signed out: fall back to the password
+      if (err.message === 'AUTH' && LG.mode === 'otp') { lgView('pw'); $('#login-error').textContent = 'Sign-in by code is not switched on yet. Please use your password.'; }
+      else if (err.message !== 'AUTH') $('#login-error').textContent = err.message;
+    } finally { btn.disabled = false; if (btn.textContent.endsWith('…')) btn.innerHTML = label; }
   });
+  $('#lg-mode').onclick = () => { $('#login-error').textContent = ''; lgView(LG.mode === 'pw' ? 'otp' : 'pw'); };
+  $('#lg-other').onclick = () => { $('#login-error').textContent = ''; $('#login-code').value = ''; lgView('otp'); };
+  $('#lg-resend').onclick = async () => {
+    $('#login-error').textContent = '';
+    try { await askCode(); toast('A new code is on its way'); } catch (err) { if (err.message !== 'AUTH') $('#login-error').textContent = err.message; }
+  };
+  $('#login-code').oninput = e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); if (e.target.value.length === 6) $('#login-form').requestSubmit(); };
 
   // Forgot password: email -> 6-digit code -> new password (signs in straight away)
   const showReset = on => {

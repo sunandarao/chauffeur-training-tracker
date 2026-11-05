@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=202611051000">
+<link rel="stylesheet" href="styles.css?v=202611051200">
 </head>
 <body>
 
@@ -52,14 +52,25 @@
       <p class="signin-eyebrow">CCR Chauffeur L&amp;D Tracker</p>
       <form id="login-form" class="signin-form" autocomplete="on">
         <h2>Welcome back.</h2>
-        <p class="muted">Sign in to see your training dashboard.</p>
+        <p class="muted" id="lg-sub">Sign in to see your training dashboard.</p>
         <label for="login-email">Work email address</label>
         <input id="login-email" type="email" required autocomplete="username" placeholder="name@ecosmobility.com">
-        <label for="login-password">Password</label>
-        <input id="login-password" type="password" required autocomplete="current-password">
-        <button id="login-btn" class="btn btn-primary" type="submit">Sign in <span aria-hidden="true">&rarr;</span></button>
+        <div id="lg-code-wrap" hidden>
+          <label for="login-code">6-digit code</label>
+          <input id="login-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456">
+        </div>
+        <div id="lg-pw-wrap" hidden>
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password">
+        </div>
+        <button id="login-btn" class="btn btn-primary" type="submit">Send OTP <span aria-hidden="true">&rarr;</span></button>
         <p id="login-error" class="form-error" role="alert"></p>
-        <button type="button" class="linkbtn" id="forgot-btn">Forgot password?</button>
+        <div class="signin-alt">
+          <button type="button" class="linkbtn" id="lg-resend" hidden>Send a new code</button>
+          <button type="button" class="linkbtn" id="lg-other" hidden>Use a different email</button>
+          <button type="button" class="linkbtn" id="lg-mode">Sign in with password instead</button>
+          <button type="button" class="linkbtn" id="forgot-btn" hidden>Forgot password?</button>
+        </div>
       </form>
       <form id="reset-form" class="signin-form" autocomplete="on" hidden>
         <h2>Set a new password</h2>
@@ -126,6 +137,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="app.js?v=202611051000"></script>
+<script src="app.js?v=202611051200"></script>
 </body>
 </html>

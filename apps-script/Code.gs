@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-04-sheets';
+var CODE_VERSION = '2026-11-05-otp';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -42,6 +42,8 @@ function route_(p) {
     if (action === 'login') return login_(p);
     if (action === 'linkLogin') return linkLogin_(p);
     if (action === 'resetRequest') return resetRequest_(p);
+    if (action === 'otpRequest') return otpRequest_(p);
+    if (action === 'otpLogin') return otpLogin_(p);
     if (action === 'resetConfirm') return withLock_(function () { return resetConfirm_(p); });
     if (action === 'fbOptions') return fbOptions_();
     if (action === 'fbCheck') return fbCheck_(p);
@@ -840,6 +842,52 @@ function changePassword_(me, p) {
   if (pw.length < 6) throw new Error('New password must be at least 6 characters.');
   setPassword_(me.row, pw);
   return { ok: true };
+}
+
+/* ------------------------------------------------------------------ sign in with an emailed code (OTP) */
+// Step 1: a 6-digit code (valid 10 minutes) is emailed to an active user. The reply is the same whether or not the
+// email is registered. At most 5 codes per email per hour. Step 2: the right code signs the person in; 5 wrong
+// tries void the code. Passwords keep working alongside this.
+var OTP_MINUTES = 10;
+
+function otpRequest_(p) {
+  var email = String(p.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter your work email address.');
+  var cache = CacheService.getScriptCache();
+  var sent = Number(cache.get('osent_' + email) || 0);
+  if (sent >= 5) throw new Error('Too many codes asked for this email. Wait an hour, or sign in with your password.');
+  cache.put('osent_' + email, String(sent + 1), 3600);
+  var reply = { ok: true, message: 'If this email has access, a 6-digit code is on its way. Check your inbox (and spam). It works for ' + OTP_MINUTES + ' minutes.' };
+  var u = findUser_(email);
+  if (!u || !u.active) return reply;
+  var code = ('00000' + (parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000)).slice(-6);
+  cache.put('ocode_' + email, hash_(code, 'otp|' + email), OTP_MINUTES * 60);
+  cache.remove('otry_' + email);
+  var app = String(settings_()['App Name'] || 'CCR Chauffeur L&D Tracker');
+  MailApp.sendEmail({
+    to: email,
+    name: app,
+    subject: 'Your sign-in code: ' + code,
+    body: 'Hello ' + u.name + ',\n\nYour code to sign in to ' + app + ' is:\n\n    ' + code + '\n\n' +
+      'It works for ' + OTP_MINUTES + ' minutes. If you did not try to sign in, ignore this email.'
+  });
+  return reply;
+}
+
+function otpLogin_(p) {
+  var email = String(p.email || '').trim().toLowerCase();
+  var code = String(p.code || '').replace(/\D/g, '');
+  var cache = CacheService.getScriptCache();
+  var h = cache.get('ocode_' + email), tries = Number(cache.get('otry_' + email) || 0);
+  if (!h || tries >= 5) throw new Error('This code has expired. Ask for a new code.');
+  if (hash_(code, 'otp|' + email) !== h) {
+    cache.put('otry_' + email, String(tries + 1), OTP_MINUTES * 60);
+    throw new Error(tries + 1 >= 5 ? 'Too many wrong codes. Ask for a new code.' : 'Wrong code. Check the email and try again.');
+  }
+  var u = findUser_(email);
+  if (!u || !u.active) throw new Error('This account is not active. Contact the admin.');
+  cache.remove('ocode_' + email); cache.remove('otry_' + email);
+  return { ok: true, token: makeToken_(u.email), name: u.name, role: u.role, email: u.email };
 }
 
 /* ------------------------------------------------------------------ forgot password */

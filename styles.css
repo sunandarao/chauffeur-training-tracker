@@ -413,3 +413,7 @@ tfoot td { background: var(--accent-soft); border-top: 2px solid var(--line); }
   .road { bottom: 6px; height: 100px; }
   .signin { padding: 36px 20px 64px; }
 }
+.signin-alt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-top: 4px; }
+.signin-alt .linkbtn { justify-self: auto; }
+#lg-code-wrap, #lg-pw-wrap { display: grid; gap: .55rem; }
+#login-code { font-size: 1.35rem; letter-spacing: .4em; text-align: center; }
