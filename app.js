@@ -116,10 +116,16 @@
 
   /* ---------------------------------------------------------------- shell */
   // KRA scorecards: admins named in config.js KRA_VIEWERS (the L&D Head), or every admin when the list is empty
-  function canKra() {
+  // Target tab: 'all' = every card (people in config.js KRA_VIEWERS), 'own' = an L&D's own card, '' = no tab.
+  // Only an admin in the list also gets the monthly inputs, locations and the attendance check list.
+  function kraAccess() {
     const u = S.user || {}, list = ((window.APP_CONFIG && window.APP_CONFIG.KRA_VIEWERS) || []).map(e => String(e).toLowerCase());
-    return u.role === 'admin' && (!list.length || list.includes(String(u.email || '').toLowerCase()));
+    if (list.includes(String(u.email || '').toLowerCase())) return 'all';
+    if ((u.role === 'trainer' || u.role === 'spoc') && S.M && kraSetup().some(s => s.trainer.toLowerCase() === String(u.name || '').toLowerCase())) return 'own';
+    return '';
   }
+  const canKra = () => !!kraAccess();
+  const kraEditor = () => kraAccess() === 'all' && (S.user || {}).role === 'admin';
   function showLogin(msg) {
     $('#app-view').hidden = true; $('#login-view').hidden = false; $('#reset-form').hidden = true; $('#login-form').hidden = false;
     $('#login-error').textContent = msg || '';
@@ -972,12 +978,12 @@
   }
 
   function viewKra() {
-    const M = S.M, me = S.user, isAdmin = me.role === 'admin';
+    const M = S.M, me = S.user, isAdmin = kraEditor();
     const all = kraSetup();
     // L&D see their own card; scoped viewers and SPOCs see cards for their locations; admin and PAN India viewers see all
     const scope = me.access && me.access !== 'All' ? new Set([].concat(me.access).map(x => String(x).toUpperCase())) : null;
     const mine = all.filter(s => s.trainer.toLowerCase() === String(me.name).toLowerCase());
-    const shown = me.role === 'trainer' && mine.length ? mine : scope ? all.filter(s => s.locs.some(l => scope.has(l))) : all;
+    const shown = kraAccess() === 'own' ? mine : scope ? all.filter(s => s.locs.some(l => scope.has(l))) : all;
     const cards = shown.map(kraCalc);
     const stat = a => (a == null ? 'neutral' : a >= 0.9 ? 'good' : a >= 0.6 ? 'warn' : 'bad');
     const scoreTxt = c => (c.score == null ? '–' : `${fmt(c.score * 100, 0)}%`);
