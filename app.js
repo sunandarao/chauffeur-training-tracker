@@ -984,27 +984,27 @@
     const owned = new Set([].concat(...all.map(s => s.locs)));
     const unowned = knownLocs.filter(l => !owned.has(l));
     $('#main').innerHTML = `
-      <div class="view-head"><div><h1>KRA Scorecard</h1><p class="muted">${esc(M.fyLabel)} to date · each L&amp;D is measured on the chauffeurs of their locations, whoever delivered the training</p></div></div>
+      <div class="view-head"><div><h1>Target Scorecard</h1><p class="muted">${esc(M.fyLabel)} to date · each L&amp;D is measured on the chauffeurs of their locations, whoever delivered the training</p></div></div>
       ${cards.length > 1 ? `<section class="panel"><div class="panel-head"><h2>Summary</h2><p class="muted">Live from the training entries · hover a heading to see how it is calculated</p></div>${table('kra-sum', [
         { key: 'trainer', label: 'L&D SPOC' }, { key: 'locs', label: 'Locations' },
         { key: 'chs', label: 'Total chauffeurs', n: 1, title: 'Chauffeurs in the master at these locations, in scope this FY', fmt: r => fmt(r.chs) },
         { key: 'cov', label: 'Unique covered (coverage %)', n: 1, title: 'Chauffeurs with at least one training this FY ÷ total chauffeurs', fmt: r => `${fmt(r.uniq)} ${r.cov == null ? '' : covPill(r.cov)}` },
         { key: 'resp', label: 'Feedback received', n: 1, title: 'Feedbacks ÷ total participants (attendances) · average rating', fmt: r => `${fmt(r.rated)} of ${fmt(r.parts)} <small class="muted">(${pctv(r.resp, 0)})</small>${r.fb == null ? '' : `<br><small class="muted">avg ${fmt(r.fb, 2)}</small>`}` },
         { key: 'hrsP', label: 'Trained ≥ 4 hrs', n: 1, title: 'Chauffeurs with 4+ training hours this FY ÷ total chauffeurs', fmt: r => `${fmt(r.hrs)} of ${fmt(r.chs)} <small class="muted">(${pct(r.hrs, r.chs, 1)})</small>` },
-        { key: 'wAll', label: 'Weightage of KRA', n: 1, title: 'KRA weightage of the CCR chauffeur KPIs', fmt: r => `${fmt(r.wAll, 0)}%` },
+        { key: 'wAll', label: 'Weightage', n: 1, title: 'Weightage of the CCR chauffeur targets', fmt: r => `${fmt(r.wAll, 0)}%` },
         { key: 'score', label: 'Achieved', n: 1, title: 'Weighted achievement of the KPIs that have data', fmt: r => `<span class="pill ${stat(r.score)}">${r.score == null ? '–' : fmt(r.score * 100, 0) + '%'}</span>` }
       ], cards.map(c => ({ trainer: c.setup.trainer, locs: c.setup.locs.join(', '), chs: c.chs, uniq: c.uniq, hrs: c.hrsOk, hrsP: c.chs ? c.hrsOk / c.chs : null,
         fb: c.fb, resp: c.resp, rated: c.rated, parts: c.parts, cov: c.chs ? c.uniq / c.chs : null, wIn: c.wIn, wAll: c.wAll, pts: c.pts, score: c.score })), { sortKey: 'score', sortDir: 'desc' })}</section>` : ''}
       ${cards.length ? cards.map(c => `<section class="panel"><div class="panel-head"><h2>${esc(c.setup.trainer)} <span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></h2>
           <p class="muted">${esc(c.setup.locs.join(', '))} · ${fmt(c.chs)} chauffeurs${c.wIn < c.wAll ? ' · KPIs without data are left out of the achievement' : ''}</p></div>
-        <div class="table-wrap"><table><thead><tr><th>KRA</th><th>KPI</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th></tr></thead><tbody>
+        <div class="table-wrap"><table><thead><tr><th>Target area</th><th>Measure</th><th class="n">Weight</th><th>Target</th><th class="n">Actual</th><th class="n">Achievement</th></tr></thead><tbody>
         ${c.rows.map(r => `<tr><td>${esc(r.kra)}</td><td>${esc(r.kpi)}${r.sub ? `<br><small class="muted">${esc(r.sub)}</small>` : ''}</td><td class="n">${fmt(r.w, 1)}%</td><td>${esc(r.target)}</td>
           <td class="n">${r.actual == null ? '<span class="muted">no data</span>' : esc(r.actual)}</td><td class="n">${r.ach == null ? '–' : `<span class="pill ${stat(r.ach)}">${fmt(r.ach * 100, 0)}%</span>`}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total</td><td class="n">${fmt(c.wAll, 0)}%</td><td></td><td></td><td class="n"><span class="pill ${stat(c.score)}">${scoreTxt(c)}</span></td></tr></tfoot></table></div><details style="margin-top:10px"${c.delivered.length > 1 ? ' open' : ''}><summary><b>Who delivered</b> the training at these locations</summary>
           <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>L&amp;D</th><th class="n">Sessions</th><th class="n">Attendances</th><th class="n">Unique chauffeurs</th><th class="n" title="Chauffeurs trained only by this person">Only by them</th><th class="n">Manhours</th><th class="n">Share</th></tr></thead><tbody>
           ${c.delivered.map(d => `<tr><td>${esc(d.t)}${d.t === c.setup.trainer ? ' <span class="pill neutral">own</span>' : ''}</td><td class="n">${fmt(d.sess)}</td><td class="n">${fmt(d.att)}</td><td class="n">${fmt(d.uniq)}</td><td class="n">${fmt(d.only)}</td><td class="n">${fmt(d.hrs, 0)}</td><td class="n">${bar(d.share, 1, pctv(d.share, 0))}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No training yet.</td></tr>'}</tbody></table></div>
           <p class="note">A chauffeur trained by more than one person counts once in the scorecard; "Only by them" counts chauffeurs nobody else trained.</p></details></section>`).join('')
-        : '<section class="panel"><p class="empty">No KRA scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
+        : '<section class="panel"><p class="empty">No target scorecard for your access. The admin sets which locations each L&amp;D is measured on.</p></section>'}
       <p class="note">Coverage (≥ ${KRA_HOURS} hrs) is compared with the target for the share of the year gone (88% × ${fyMonthsDone()} of 12 months). Feedback achievement is scaled down when fewer than 88% of attendees gave feedback. Incident reduction uses the duty and incident counts in the chauffeur master.</p>
       ${isAdmin ? checksPanel() : ''}
       ${isAdmin ? `<section class="panel" id="kra-in"><div class="panel-head"><h2>Monthly inputs</h2><p class="muted">Figures the tracker cannot calculate. Saved to the "KRA Inputs" tab of the Google Sheet.</p></div>

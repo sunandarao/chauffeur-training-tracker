@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=202611051400">
+<link rel="stylesheet" href="styles.css?v=202611051800">
 </head>
 <body>
 
@@ -16,6 +16,13 @@
 <section id="login-view" class="login lw" hidden>
   <div class="lw-in">
     <p class="lw-top">CCR &middot; Chauffeur Learning &amp; Development</p>
+    <div class="lw-main">
+    <div class="lw-collage" aria-label="Chauffeur training sessions">
+      <figure class="ph ph1"><img src="img/training-2.jpg" alt="Chauffeurs in a White Gloves classroom session" loading="eager"><figcaption>White Gloves Training</figcaption></figure>
+      <figure class="ph ph2"><img src="img/training-4.jpg" alt="Trainer presenting to chauffeurs around a table"><figcaption>Service excellence</figcaption></figure>
+      <figure class="ph ph3"><img src="img/training-1.jpg" alt="Trainer explaining the chauffeur details card"><figcaption>In the classroom</figcaption></figure>
+      <figure class="ph ph4"><img src="img/training-3.jpg" alt="Chauffeurs following a presentation on eye contact"><figcaption>Every gesture counts</figcaption></figure>
+    </div>
     <div class="signin-card">
       <img src="logo.webp" alt="ECO Mobility" class="signin-logo">
       <p class="signin-eyebrow">CCR Chauffeur L&amp;D Tracker</p>
@@ -65,6 +72,7 @@
       </form>
       <p class="signin-help">Access is limited to authorised L&amp;D users. Need access? <a id="access-link" href="mailto:">Request it here</a>.</p>
     </div>
+    </div>
     <div class="lw-band">
       <p class="lw-line">Every chauffeur, <b>trained, tracked and trusted</b>, across India.</p>
       <ul class="lw-mods" aria-label="Training modules">
@@ -77,7 +85,10 @@
         <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4l2 3v11H7V10l2-3z"/></svg>Grooming &amp; Hygiene</li>
         <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>English Session</li>
       </ul>
+      <div class="lw-links">
+      <a class="lw-cal" href="img/calendar.jpg" target="_blank" rel="noopener"><img src="img/calendar.jpg" alt="" loading="lazy"><span><b>This month's training calendar</b><small>Dates and locations · tap to open</small></span></a>
       <a class="lw-fb" href="feedback.html"><span class="lw-fb-ico" aria-hidden="true">&#9733;</span><span><b>Chauffeur?</b> Share your feedback after a session</span><span aria-hidden="true">&rarr;</span></a>
+      </div>
     </div>
     <p class="signin-foot">ECOS (India) Mobility &amp; Hospitality Limited</p>
   </div>
@@ -101,7 +112,7 @@
     <button data-view="locations" type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Location Card</span></button>
     <button data-view="chauffeurs" type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg><span>Chauffeur Master</span></button>
     <button data-view="feedback" type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></svg><span>Feedback</span></button>
-    <button data-view="kra" type="button" id="kra-tab" hidden><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/></svg><span>KRA</span></button>
+    <button data-view="kra" type="button" id="kra-tab" hidden><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/></svg><span>Target</span></button>
     <button data-view="add" type="button" class="tab-primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Add Training</span></button>
     <button data-view="entries" type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg><span>Entries</span></button>
     <button data-view="admin" type="button" id="admin-tab" hidden><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Admin</span></button>
@@ -120,6 +131,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="app.js?v=202611051600"></script>
+<script src="app.js?v=202611051800"></script>
 </body>
 </html>
