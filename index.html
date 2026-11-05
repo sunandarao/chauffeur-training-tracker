@@ -8,46 +8,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=202611051200">
+<link rel="stylesheet" href="styles.css?v=202611051400">
 </head>
 <body>
 
-<!-- Login: cover panel (programme story + links for people without a login) and the sign-in panel -->
-<section id="login-view" class="login" hidden>
-  <div class="cover">
-    <div class="cover-in">
-      <p class="cover-eyebrow">CCR &middot; Chauffeur Learning &amp; Development</p>
-      <h1 class="cover-title">Every chauffeur.<br>Trained, tracked, <em>trusted.</em></h1>
-      <p class="cover-lead">Plan sessions, record attendance, collect feedback and follow every chauffeur's training across India, in one place.</p>
-      <ol class="cover-steps">
-        <li><b>01</b><span>Train</span></li>
-        <li><b>02</b><span>Record</span></li>
-        <li><b>03</b><span>Feedback</span></li>
-        <li><b>04</b><span>Improve</span></li>
-      </ol>
-      <div class="cover-links">
-        <a class="cover-btn" href="feedback.html">Give training feedback <span aria-hidden="true">&rarr;</span></a>
-        <a class="cover-btn ghost" id="access-link" href="mailto:">Request access</a>
-      </div>
-      <p class="cover-note">Chauffeurs: share your feedback after a session, no login needed.</p>
-    </div>
-    <svg class="road" viewBox="0 0 1000 140" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <path id="road-path" d="M-20 50 H430 C470 50 478 56 488 84 C498 112 506 118 548 118 H1020" fill="none" stroke="#e8424f" stroke-width="2.5" stroke-dasharray="7 6"/>
-      <g class="car">
-        <g transform="translate(-27 -12)">
-          <rect x="0" y="0" width="54" height="24" rx="9" fill="#3b4a55"/>
-          <rect x="12" y="3" width="20" height="18" rx="5" fill="#9fb3bf"/>
-          <rect x="35" y="4" width="9" height="16" rx="3" fill="#6f8796"/>
-          <rect x="49" y="3" width="4" height="5" rx="2" fill="#ffd66b"/><rect x="49" y="16" width="4" height="5" rx="2" fill="#ffd66b"/>
-          <rect x="0" y="3" width="3" height="5" rx="1" fill="#ff4d5a"/><rect x="0" y="16" width="3" height="5" rx="1" fill="#ff4d5a"/>
-        </g>
-        <animateMotion dur="14s" repeatCount="indefinite" rotate="auto"><mpath href="#road-path"/></animateMotion>
-      </g>
-    </svg>
-  </div>
-
-  <div class="signin">
-    <div class="signin-in">
+<!-- Login: soft background, sign-in card in the middle, module badges and links for people without a login -->
+<section id="login-view" class="login lw" hidden>
+  <div class="lw-in">
+    <p class="lw-top">CCR &middot; Chauffeur Learning &amp; Development</p>
+    <div class="signin-card">
       <img src="logo.webp" alt="ECO Mobility" class="signin-logo">
       <p class="signin-eyebrow">CCR Chauffeur L&amp;D Tracker</p>
       <form id="login-form" class="signin-form" autocomplete="on">
@@ -94,7 +63,21 @@
         <p id="rs-error" class="form-error" role="alert"></p>
         <button type="button" class="linkbtn" id="rs-back">Back to sign in</button>
       </form>
-      <p class="signin-help">Access is limited to authorised L&amp;D users. For help, contact your administrator.</p>
+      <p class="signin-help">Access is limited to authorised L&amp;D users. Need access? <a id="access-link" href="mailto:">Request it here</a>.</p>
+    </div>
+    <div class="lw-band">
+      <p class="lw-line">Every chauffeur, <b>trained, tracked and trusted</b>, across India.</p>
+      <ul class="lw-mods" aria-label="Training modules">
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V7z"/></svg>Smart Chauffeur Induction</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 6.3L21 9l-5 4.4L17.5 20 12 16.7 6.5 20 8 13.4 3 9l6.4-.7z"/></svg>SMART Chauffeur Training</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm0-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 10h5.6M14.9 10h5.6M12 15v6"/></svg>Defensive Driving</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21v-8l-2-3V6a1.5 1.5 0 0 1 3 0v4V4.5a1.5 1.5 0 0 1 3 0V10 3.5a1.5 1.5 0 0 1 3 0V10 5a1.5 1.5 0 0 1 3 0v8l-2 4v4z"/></svg>White Gloves</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/></svg>First Aid</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Respect First</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4l2 3v11H7V10l2-3z"/></svg>Grooming &amp; Hygiene</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>English Session</li>
+      </ul>
+      <a class="lw-fb" href="feedback.html"><span class="lw-fb-ico" aria-hidden="true">&#9733;</span><span><b>Chauffeur?</b> Share your feedback after a session</span><span aria-hidden="true">&rarr;</span></a>
     </div>
     <p class="signin-foot">ECOS (India) Mobility &amp; Hospitality Limited</p>
   </div>
@@ -137,6 +120,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="app.js?v=202611051200"></script>
+<script src="app.js?v=202611051400"></script>
 </body>
 </html>
