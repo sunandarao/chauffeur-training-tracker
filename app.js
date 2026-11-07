@@ -125,6 +125,34 @@
     return '';
   }
   const canKra = () => !!kraAccess();
+  // Super admins (config.js SUPER_ADMINS) see the access log; the Apps Script checks this too
+  const isSuper = () => ((window.APP_CONFIG && window.APP_CONFIG.SUPER_ADMINS) || []).map(e => String(e).toLowerCase()).includes(String((S.user || {}).email || '').toLowerCase());
+  // what is recorded about the device: phone / tablet / laptop, system and browser (no IP, no location)
+  const DEVICE = (() => {
+    const u = navigator.userAgent || '';
+    const type = /iPad|Tablet/i.test(u) ? 'Tablet' : /Mobi|Android|iPhone/i.test(u) ? 'Phone' : 'Laptop/PC';
+    const os = /Windows/i.test(u) ? 'Windows' : /Android/i.test(u) ? 'Android' : /iPhone|iPad/i.test(u) ? 'iOS' : /Mac OS/i.test(u) ? 'Mac' : /Linux/i.test(u) ? 'Linux' : '';
+    const br = /Edg\//.test(u) ? 'Edge' : /OPR\//.test(u) ? 'Opera' : /Chrome\//.test(u) ? 'Chrome' : /Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : '';
+    return [type, os, br].filter(Boolean).join(' · ');
+  })();
+  // record a page or record opened; the same thing within 2 minutes is recorded once; never in the way
+  function track(event, detail) {
+    if (!S.token) return;
+    const k = event + '|' + (detail || ''), now = Date.now();
+    track.seen = track.seen || {};
+    if (track.seen[k] && now - track.seen[k] < 120000) return;
+    track.seen[k] = now;
+    api('logView', { event, detail: detail || '', ua: DEVICE }).catch(() => {});
+  }
+  function viewDetail() {
+    const v = S.view, f = S.chf || {}, e = S.enf || {}, fb = S.fbf || {};
+    const name = { dashboard: 'Dashboard', locations: 'Location Card', chauffeurs: 'Chauffeur Master', feedback: 'Feedback', kra: 'Target', add: 'Add Training', entries: 'Entries', admin: 'Admin' }[v] || v;
+    const bits = v === 'dashboard' ? [S.dashLoc && S.dashLoc !== 'All' ? S.dashLoc : 'All locations']
+      : v === 'locations' ? [S.cardLoc || (S.M && S.M.locations[0]) || ''] : v === 'chauffeurs' ? [f.loc && f.loc !== 'All' ? f.loc : '', f.q || '']
+      : v === 'feedback' ? [fb.loc && fb.loc !== 'All' ? fb.loc : '', fb.tr && fb.tr !== 'All' ? fb.tr : '']
+      : v === 'entries' ? [e.from || e.to ? `${e.from || '…'} to ${e.to || '…'}` : '', e.tr && e.tr !== 'All' ? e.tr : '', e.loc && e.loc !== 'All' ? e.loc : ''] : [];
+    return [name].concat(bits.filter(Boolean)).join(' · ');
+  }
   const kraEditor = () => kraAccess() === 'all' && (S.user || {}).role === 'admin';
   function showLogin(msg) {
     $('#app-view').hidden = true; $('#login-view').hidden = false; $('#reset-form').hidden = true; $('#login-form').hidden = false;
@@ -168,8 +196,8 @@
     btn.textContent = LG.mode === 'otp' ? 'Sending…' : 'Signing in…';
     try {
       if (LG.mode === 'otp') await askCode();
-      else if (LG.mode === 'code') await signedIn(await api('otpLogin', { email: $('#login-email').value.trim(), code: $('#login-code').value }));
-      else await signedIn(await api('login', { email: $('#login-email').value.trim(), password: $('#login-password').value }));
+      else if (LG.mode === 'code') await signedIn(await api('otpLogin', { email: $('#login-email').value.trim(), code: $('#login-code').value, ua: DEVICE }));
+      else await signedIn(await api('login', { email: $('#login-email').value.trim(), password: $('#login-password').value, ua: DEVICE }));
     } catch (err) {
       // an Apps Script without the code sign-in answers as if signed out: fall back to the password
       if (err.message === 'AUTH' && LG.mode === 'otp') { lgView('pw'); $('#login-error').textContent = 'Sign-in by code is not switched on yet. Please use your password.'; }
@@ -214,7 +242,7 @@
     if (pw !== $('#rs-pw2').value) { $('#rs-error').textContent = 'The two passwords do not match.'; return; }
     const btn = $('#rs-save'); btn.disabled = true; btn.textContent = 'Saving…'; $('#rs-error').textContent = '';
     try {
-      const out = await api('resetConfirm', { email: $('#rs-email').value.trim(), code: $('#rs-code').value, newPassword: pw });
+      const out = await api('resetConfirm', { email: $('#rs-email').value.trim(), code: $('#rs-code').value, newPassword: pw, ua: DEVICE });
       S.token = out.token; S.user = { name: out.name, role: out.role, email: out.email };
       store.set(LS.token, S.token); store.set(LS.user, JSON.stringify(S.user));
       $('#rs-pw').value = ''; $('#rs-pw2').value = ''; $('#rs-code').value = '';
@@ -369,6 +397,7 @@
     destroyCharts();
     const views = { dashboard: viewDashboard, locations: viewLocation, chauffeurs: viewChauffeurs, feedback: viewFeedback, kra: viewKra, add: viewAdd, entries: viewEntries, admin: viewAdmin };
     (views[S.view] || viewDashboard)();
+    track('Viewed', viewDetail());
     if (S.view === 'dashboard' || S.view === 'locations') welcome();
     wireGo($('#main'));
     const h = routeHash(); if (location.hash !== h) history.replaceState(null, '', h);
@@ -756,6 +785,7 @@
 
   function openChauffeur(code) {
     const M = S.M; const c = M.ch[code]; if (!c) return;
+    track('Opened chauffeur', `${c.code} · ${c.name} · ${c.loc}`);
     const fyAtt = c.att.filter(a => a.inFY).sort((a, b) => b.date.localeCompare(a.date));
     const all = c.att.slice().sort((a, b) => b.date.localeCompare(a.date));
     const activeMods = M.modules.filter(m => m.active || c.mods[m.name]);
@@ -1598,7 +1628,7 @@
     const incomplete = M.chList.filter(c => c.status === 'Added from CCR');
     $('#main').innerHTML = `
       <div class="view-head"><div><h1>Admin</h1><p class="muted">Users, modules, chauffeur records and settings. Changes save straight to the Google Sheet.</p></div></div>
-      <nav class="subnav" aria-label="Admin sections">${[['ad-users', 'Users'], ['ad-sync', 'Sheet sync'], ['ad-master', 'Weekly master'], ['ad-import', 'Import feedback'], ['ad-codes', 'Fix codes'], ['ad-chauffeur', 'Add chauffeur'], ['ad-modules', 'Modules'], ['ad-fy', 'Financial year']]
+      <nav class="subnav" aria-label="Admin sections">${[['ad-users', 'Users'], ['ad-sync', 'Sheet sync'], ['ad-master', 'Weekly master'], ['ad-import', 'Import feedback'], ['ad-codes', 'Fix codes'], ['ad-chauffeur', 'Add chauffeur'], ['ad-modules', 'Modules'], ['ad-fy', 'Financial year']].concat(isSuper() ? [['ad-log', 'Access log']] : [])
         .map(([id, t]) => `<button type="button" data-jump="${id}">${t}</button>`).join('')}</nav>
       <section class="panel" id="ad-users"><div class="panel-head"><h2>Users</h2><p class="muted">L&amp;D team signs in with email + password</p></div><div class="loading">Loading users…</div></section>
       <section class="panel" id="ad-sync">
@@ -1651,9 +1681,12 @@
           <div class="field" style="max-width:240px"><label for="st-fy">FY start date</label><input type="date" id="st-fy" value="${esc(M.fyStart)}"></div>
           <p class="note">Chauffeurs who left before this date are excluded, and only trainings inside the year are counted. Change it to 1 April each new year.</p>
           <div class="actions" style="margin-top:8px"><button class="btn btn-primary" id="st-save" type="button">Save</button></div></section>
+        ${isSuper() ? `<section class="panel" id="ad-log"><div class="panel-head"><h2>Access log</h2><p class="muted">Who signed in, when, and what they opened · visible only to you</p></div>
+          <div class="actions"><button class="btn btn-primary btn-sm" id="lg-load" type="button">Show the log</button><span id="lg-msg" class="muted"></span></div><div id="lg-out"></div></section>` : ''}
       </div>`;
 
     const done = async msg => { await load(true); render(); toast(msg); };
+    if ($('#lg-load')) $('#lg-load').onclick = () => showAccessLog();
     $$('[data-jump]').forEach(b => b.onclick = () => { const el = document.getElementById(b.dataset.jump); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); });
 
     // Feedback import: preview against the live data, then write (optionally clearing all ratings first)
@@ -1984,9 +2017,56 @@
   }
 
   /* ---------------------------------------------------------------- Excel export */
+  async function showAccessLog() {
+    const out = $('#lg-out'), msg = $('#lg-msg'); msg.textContent = 'Loading…';
+    let res;
+    try { res = await api('listLog', { limit: 5000 }); }
+    catch (err) { msg.innerHTML = err.message === 'AUTH' ? '' : `<span class="form-error">${esc(/Unknown action/.test(err.message) ? 'Update the Apps Script first (see the README), then refresh.' : err.message)}</span>`; return; }
+    const rows = res.rows.map(r => ({ time: r[0], name: r[1], email: r[2], role: r[3], event: r[4], detail: r[5], device: r[6] }));
+    msg.textContent = `${fmt(rows.length)} of ${fmt(res.total || rows.length)} events (newest first)`;
+    const f = S.logf = S.logf || { who: 'All', ev: 'All', q: '' };
+    const people = Array.from(new Set(rows.map(r => r.email))).sort();
+    const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    const who = Array.from(groupBy(rows, r => r.email).entries()).map(([email, l]) => ({
+      name: l[0].name, email, role: { admin: 'Admin', trainer: 'L&D', spoc: 'L&D SPOC', viewer: 'Viewer' }[l[0].role] || l[0].role, last: l[0].time,
+      signins: l.filter(r => r.event === 'Signed in' && r.time >= since).length, views: l.filter(r => r.event !== 'Signed in' && r.time >= since).length, device: l[0].device }));
+    const draw = () => {
+      const q = f.q.toLowerCase();
+      const list = rows.filter(r => (f.who === 'All' || r.email === f.who) && (f.ev === 'All' || r.event === f.ev) && (!q || (r.name + ' ' + r.detail + ' ' + r.device).toLowerCase().includes(q)));
+      $('#lg-list').innerHTML = table('lgl', [
+        { key: 'time', label: 'When (IST)' }, { key: 'name', label: 'Who', fmt: r => `${esc(r.name)}<br><small class="muted">${esc(r.email)}</small>` },
+        { key: 'event', label: 'What', fmt: r => `<span class="pill ${r.event === 'Signed in' ? 'good' : r.event === 'Exported Excel' ? 'warn' : 'neutral'}">${esc(r.event)}</span>` },
+        { key: 'detail', label: 'Details' }, { key: 'device', label: 'Device' }
+      ], list, { sortKey: 'time', sortDir: 'desc', tall: true, limit: 1000 });
+      wireSort($('#lg-list'), draw);
+    };
+    out.innerHTML = `
+      <h3 style="margin-top:14px">People (last 30 days)</h3>
+      ${table('lgw', [{ key: 'name', label: 'Who', fmt: r => `${esc(r.name)}<br><small class="muted">${esc(r.email)}</small>` }, { key: 'role', label: 'Role' },
+        { key: 'last', label: 'Last seen (IST)' }, { key: 'signins', label: 'Sign-ins', n: 1 }, { key: 'views', label: 'Pages opened', n: 1 }, { key: 'device', label: 'Last device' }], who, { sortKey: 'last', sortDir: 'desc' })}
+      <h3 style="margin-top:16px">Every event</h3>
+      <div class="filters compact" style="margin-top:6px">${select('lg-who', 'Person', [['All', 'Everyone']].concat(people.map(e => [e, (who.find(w => w.email === e) || {}).name + ' · ' + e])), f.who)}
+        ${select('lg-ev', 'What', ['All', 'Signed in', 'Viewed', 'Opened chauffeur', 'Exported Excel'], f.ev)}
+        <div class="field wide"><label for="lg-q">Search</label><input id="lg-q" value="${esc(f.q)}" placeholder="page, location, chauffeur, device…"></div>
+        <div class="field"><label>&nbsp;</label><button class="btn btn-sm" id="lg-dl" type="button">Download (Excel)</button></div></div>
+      <div id="lg-list"></div>`;
+    $('#lg-who').onchange = e => { f.who = e.target.value; draw(); };
+    $('#lg-ev').onchange = e => { f.ev = e.target.value; draw(); };
+    $('#lg-q').oninput = e => { f.q = e.target.value; draw(); };
+    $('#lg-dl').onclick = () => {
+      if (!window.XLSX) return toast('Please wait a moment and try again.');
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['When (IST)', 'Name', 'Email', 'Role', 'What', 'Details', 'Device']].concat(rows.map(r => [r.time, r.name, r.email, r.role, r.event, r.detail, r.device]))), 'Access log');
+      XLSX.writeFile(wb, `Access_log_${todayIso()}.xlsx`);
+    };
+    wireSort(out, () => showAccessLog());
+    draw();
+  }
+
   function exportExcel() {
     if (S.user && S.user.role === 'viewer') return;
     if (!S.M || !window.XLSX) { toast('Export is not ready yet. Try again in a moment.'); return; }
+    track('Exported Excel', S.M.fyLabel);
     const M = S.M; const wb = XLSX.utils.book_new();
     const add = (name, rows, widths) => { const ws = XLSX.utils.aoa_to_sheet(rows); if (widths) ws['!cols'] = widths.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, name); };
     const r1 = v => (v == null ? '' : Math.round(v * 10) / 10), r2 = v => (v == null ? '' : Math.round(v * 100) / 100);
@@ -2026,7 +2106,7 @@
     if (m) {
       history.replaceState(null, '', location.pathname + location.search);
       try {
-        const out = await api('linkLogin', { key: m[1] });
+        const out = await api('linkLogin', { key: m[1], ua: DEVICE });
         S.token = out.token; S.user = { name: out.name, role: out.role, email: out.email };
         store.set(LS.token, S.token); store.set(LS.user, JSON.stringify(S.user));
         return start(true);

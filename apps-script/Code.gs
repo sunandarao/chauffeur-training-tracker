@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-05-otp';
+var CODE_VERSION = '2026-11-07-log';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -84,6 +84,8 @@ function act_(action, me, p) {
     case 'rebuildMasterView': admin_(me); return withLock_(function () { return rebuildMasterView_(); });
     case 'saveSettings': admin_(me); return withLock_(function () { return saveSettings_(p); });
     case 'saveKra': admin_(me); return withLock_(function () { return saveKra_(p); });
+    case 'logView': return logView_(me, p);
+    case 'listLog': superAdmin_(me); return listLog_(p);
     case 'uploadSheet': editor_(me); return uploadSheet_(me, p);
     default: throw new Error('Unknown action: ' + action);
   }
@@ -356,6 +358,7 @@ function login_(p) {
     throw new Error('Wrong email or password.');
   }
   cache.remove(key);
+  logEvent_(u, 'Signed in', 'password', p.ua);
   return { ok: true, token: makeToken_(u.email), name: u.name, role: u.role, email: u.email };
 }
 
@@ -374,6 +377,7 @@ function linkLogin_(p) {
     if (String(t.rows[i][c]) === h) {
       var u = findUser_(t.rows[i][col_(t, 'Email')]);
       if (!u || !u.active) throw new Error('This account is not active. Contact the admin.');
+      logEvent_(u, 'Signed in', 'personal view link', p.ua);
       return { ok: true, token: makeToken_(u.email), name: u.name, role: u.role, email: u.email };
     }
   }
@@ -887,6 +891,7 @@ function otpLogin_(p) {
   var u = findUser_(email);
   if (!u || !u.active) throw new Error('This account is not active. Contact the admin.');
   cache.remove('ocode_' + email); cache.remove('otry_' + email);
+  logEvent_(u, 'Signed in', 'emailed code', p.ua);
   return { ok: true, token: makeToken_(u.email), name: u.name, role: u.role, email: u.email };
 }
 
@@ -936,6 +941,7 @@ function resetConfirm_(p) {
   if (!u || !u.active) throw new Error('This account is not active. Contact the admin.');
   setPassword_(u.row, pw);
   cache.remove('rcode_' + email); cache.remove('rtry_' + email); cache.remove('fail_' + email);
+  logEvent_(u, 'Signed in', 'password reset', p.ua);
   return { ok: true, token: makeToken_(u.email), name: u.name, role: u.role, email: u.email };
 }
 
@@ -1447,6 +1453,41 @@ function mergeModule_(p) {
   }
   if (iFrom >= 0) mo.sh.getRange(iFrom + 2, 3).setValue('No');
   return { ok: true, moved: moved };
+}
+
+/* ------------------------------------------------------------------ access log (super admin only) */
+// One row per sign-in and per page or record opened: who, when, what, on which device. Read only by the people in
+// SUPER_ADMINS. Logging never blocks the app: a failed write is ignored. The oldest rows are trimmed past LOG_MAX.
+var SUPER_ADMINS = ['sunanda.rao@ecosmobility.com'];
+var LOG_SHEET = 'Access Log', LOG_COLS = ['Time', 'Name', 'Email', 'Role', 'Event', 'Detail', 'Device'], LOG_MAX = 20000;
+
+function superAdmin_(me) {
+  if (SUPER_ADMINS.indexOf(String(me.email).toLowerCase()) < 0) throw new Error('Only the super admin can see the access log.');
+}
+
+function logEvent_(u, event, detail, device) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(LOG_SHEET);
+    if (!sh) { sh = ss.insertSheet(LOG_SHEET); sh.getRange(1, 1, 1, LOG_COLS.length).setValues([LOG_COLS]).setFontWeight('bold'); sh.setFrozenRows(1); }
+    sh.appendRow([new Date(), u.name, u.email, u.role, String(event).slice(0, 60), String(detail || '').slice(0, 200), String(device || '').slice(0, 80)]);
+    if (sh.getLastRow() > LOG_MAX + 1000) sh.deleteRows(2, 1000);
+  } catch (err) { /* never block the app */ }
+}
+
+function logView_(me, p) {
+  logEvent_(me, String(p.event || 'Viewed'), p.detail, p.ua);
+  return { ok: true };
+}
+
+/** The newest rows first, at most p.limit (default 2000). */
+function listLog_(p) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LOG_SHEET);
+  if (!sh || sh.getLastRow() < 2) return { ok: true, rows: [] };
+  var n = sh.getLastRow() - 1, take = Math.min(n, Math.max(1, Math.min(Number(p.limit) || 2000, 10000)));
+  var rows = sh.getRange(sh.getLastRow() - take + 1, 1, take, LOG_COLS.length).getValues().reverse().map(function (r) {
+    return [r[0] instanceof Date ? Utilities.formatDate(r[0], 'Asia/Kolkata', "yyyy-MM-dd HH:mm") : String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), String(r[5]), String(r[6])];
+  });
+  return { ok: true, rows: rows, total: n };
 }
 
 /* ------------------------------------------------------------------ KRA scorecard */
