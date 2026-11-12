@@ -1195,16 +1195,21 @@
   /* ---------------------------------------------------------------- Focus: targeted training */
   // 1) New joiners since the FY start: induction received, and how many days after joining.
   // 2) Topics: per location, how many chauffeurs did each module and who delivered it; per chauffeur, done and still to do.
-  const INDUCTION_RE = /induction/i;
+  // One induction (any induction module), two deadlines: the branch within 7 days of joining, L&D at the latest within 30.
+  const INDUCTION_RE = /induction/i, BH_DAYS = 7, LD_DAYS = 30;
   function focusData(loc, activeOnly) {
     const M = S.M, fy = M.fyStart, today = todayIso();
     const chs = M.scoped.filter(c => (loc === 'All' || c.loc === loc) && (!activeOnly || isActive(c)));
     const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+    const first = (c, test) => c.att.filter(a => test(a.module)).sort((x, y) => x.date.localeCompare(y.date))[0];
     const joiners = chs.filter(c => c.doj && c.doj >= fy && c.doj <= today).map(c => {
-      const ind = c.att.filter(a => INDUCTION_RE.test(a.module)).sort((x, y) => x.date.localeCompare(y.date))[0];
-      const d = ind ? days(c.doj, ind.date) : null;
-      return { c, code: c.code, name: c.name, loc: c.loc, doj: c.doj, mobile: c.mobile, ind, indDate: ind ? ind.date : '', by: ind ? ind.trainer : '', d,
-        band: !ind ? 'pending' : d <= 0 ? 'before' : d <= 7 ? 'w7' : d <= 30 ? 'w30' : 'late', since: days(c.doj, today) };
+      const ld = first(c, m => INDUCTION_RE.test(m)), bh = ld;
+      const since = days(c.doj, today), d = ld ? Math.max(0, days(c.doj, ld.date)) : null, dBh = d;
+      // L&D: done on time / done late / still within the 30 days / overdue
+      const ldSt = ld ? (d <= LD_DAYS ? 'ontime' : 'late') : since <= LD_DAYS ? 'due' : 'overdue';
+      const bhSt = bh ? (dBh <= BH_DAYS ? 'ontime' : 'late') : since <= BH_DAYS ? 'due' : 'overdue';
+      return { c, code: c.code, name: c.name, loc: c.loc, doj: c.doj, mobile: c.mobile, ind: ld, indDate: ld ? ld.date : '', by: ld ? ld.trainer : '', d, ldSt,
+        bh, bhDate: bh ? bh.date : '', bhBy: bh ? bh.trainer : '', dBh, bhSt, since, left: LD_DAYS - since };
     });
     const mods = masterMods().map(m => m.name);
     return { chs, joiners, mods };
@@ -1213,12 +1218,13 @@
     const M = S.M, f = S.foc = S.foc || { loc: 'All', act: true, tloc: '' };
     const { chs, joiners, mods } = focusData(f.loc, f.act);
     const ind = joiners.filter(j => j.ind), pend = joiners.filter(j => !j.ind);
-    const w7 = joiners.filter(j => j.band === 'before' || j.band === 'w7').length;
-    const avgD = ind.length ? avg(ind.map(j => Math.max(0, j.d))) : null;
+    const cnt = (l, k, v) => l.filter(j => j[k] === v).length;
+    const avgD = ind.length ? avg(ind.map(j => j.d)) : null;
     const byLoc = Array.from(groupBy(joiners, j => j.loc).entries()).map(([loc, l]) => {
       const i = l.filter(j => j.ind);
-      return { loc, n: l.length, ind: i.length, pct: l.length ? i.length / l.length : 0, w7: l.filter(j => j.band === 'before' || j.band === 'w7').length,
-        w30: l.filter(j => j.band === 'w30').length, late: l.filter(j => j.band === 'late').length, pend: l.length - i.length, avgd: i.length ? avg(i.map(j => Math.max(0, j.d))) : null };
+      return { loc, n: l.length, bhOk: cnt(l, 'bhSt', 'ontime'), bhOver: cnt(l, 'bhSt', 'overdue') + cnt(l, 'bhSt', 'late'),
+        ldOk: cnt(l, 'ldSt', 'ontime'), pct: l.length ? cnt(l, 'ldSt', 'ontime') / l.length : 0, late: cnt(l, 'ldSt', 'late'), due: cnt(l, 'ldSt', 'due'), over: cnt(l, 'ldSt', 'overdue'),
+        avgd: i.length ? avg(i.map(j => j.d)) : null };
     });
     // topics: unique chauffeurs per module per location, and who delivered it
     const inSet = new Set(chs), att = M.fyAtt.filter(a => inSet.has(a.c));
@@ -1243,34 +1249,40 @@
           <div class="field" style="width:auto"><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center;font-size:.9rem;color:var(--ink)"><input type="checkbox" id="fo-act" style="width:auto"${f.act ? ' checked' : ''}> Active chauffeurs only</label></div>
           <div class="field" style="width:auto"><label>&nbsp;</label><button class="btn" id="fo-xls" type="button">Download (Excel)</button></div></div></div>
 
-      <section class="panel"><div class="panel-head"><h2>1. New joiners since ${esc(dShort(M.fyStart))}: induction</h2><p class="muted">Days = first induction date − date of joining · target: within 7 days</p></div>
+      <section class="panel"><div class="panel-head"><h2>1. New joiners since ${esc(dShort(M.fyStart))}: induction</h2><p class="muted">Induction targets: <b>branch within ${BH_DAYS} days</b> of joining · <b>L&amp;D at the latest within ${LD_DAYS} days</b></p></div>
         ${kpis([
           { label: 'New joiners', value: fmt(joiners.length), sub: f.loc === 'All' ? 'all locations' : f.loc },
-          { label: 'Inducted', value: fmt(ind.length), sub: pct(ind.length, joiners.length, 1) + ' of joiners', cls: 'good' },
-          { label: 'Within 7 days', value: fmt(w7), sub: pct(w7, joiners.length, 1) + ' of joiners' },
-          { label: 'Average days', value: avgD == null ? '–' : fmt(avgD, 0), sub: 'joining to induction' },
-          { label: 'Still to be inducted', value: fmt(pend.length), sub: 'call these first', cls: pend.length ? 'bad' : '' }
+          { label: `Within ${BH_DAYS} days`, value: fmt(cnt(joiners, 'bhSt', 'ontime')), sub: pct(cnt(joiners, 'bhSt', 'ontime'), joiners.length, 1) + ' · branch target', cls: 'good' },
+          { label: `Within ${LD_DAYS} days`, value: fmt(cnt(joiners, 'ldSt', 'ontime')), sub: pct(cnt(joiners, 'ldSt', 'ontime'), joiners.length, 1) + ' · L&D target', cls: 'good' },
+          { label: 'Inducted late', value: fmt(cnt(joiners, 'ldSt', 'late')), sub: `after ${LD_DAYS} days`, cls: 'warn' },
+          { label: 'Not yet, still in time', value: fmt(cnt(joiners, 'ldSt', 'due')), sub: `joined in the last ${LD_DAYS} days` },
+          { label: 'Overdue', value: fmt(cnt(joiners, 'ldSt', 'overdue')), sub: `no induction after ${LD_DAYS} days`, cls: cnt(joiners, 'ldSt', 'overdue') ? 'bad' : '' },
+          { label: 'Average days', value: avgD == null ? '–' : fmt(avgD, 0), sub: 'joining to induction' }
         ])}
         <div style="margin-top:14px">${table('fo-loct', [
-          { key: 'loc', label: 'Location' }, { key: 'n', label: 'Joiners', n: 1 }, { key: 'ind', label: 'Inducted', n: 1 },
-          { key: 'pct', label: '% inducted', n: 1, fmt: r => `<span class="pill ${pctCls(r.pct)}">${pctv(r.pct, 0)}</span>` },
-          { key: 'w7', label: '≤ 7 days', n: 1, title: 'Inducted on or within 7 days of joining' }, { key: 'w30', label: '8–30 days', n: 1 }, { key: 'late', label: '> 30 days', n: 1 },
-          { key: 'avgd', label: 'Avg days', n: 1, fmt: r => (r.avgd == null ? '–' : fmt(r.avgd, 0)) },
-          { key: 'pend', label: 'Pending', n: 1, fmt: r => (r.pend ? `<span class="pill bad">${fmt(r.pend)}</span>` : '0') }
-        ], byLoc, { sortKey: 'pend', sortDir: 'desc', tall: true })}</div>
+          { key: 'loc', label: 'Location' }, { key: 'n', label: 'Joiners', n: 1 },
+          { key: 'bhOk', label: `≤ ${BH_DAYS} days (branch)`, n: 1, title: 'Inducted within 7 days of joining' }, { key: 'bhOver', label: `Missed ${BH_DAYS} days`, n: 1, title: 'Not inducted within 7 days', fmt: r => (r.bhOver ? `<span class="pill warn">${fmt(r.bhOver)}</span>` : '0') },
+          { key: 'ldOk', label: `≤ ${LD_DAYS} days (L&D)`, n: 1, title: 'Inducted within 30 days of joining' }, { key: 'pct', label: '% within 30', n: 1, fmt: r => `<span class="pill ${pctCls(r.pct)}">${pctv(r.pct, 0)}</span>` },
+          { key: 'late', label: 'Late', n: 1, title: 'Inducted after 30 days' }, { key: 'due', label: 'Still in time', n: 1, title: 'Joined in the last 30 days, not yet inducted' },
+          { key: 'over', label: 'Overdue', n: 1, title: 'Over 30 days and no induction', fmt: r => (r.over ? `<span class="pill bad">${fmt(r.over)}</span>` : '0') },
+          { key: 'avgd', label: 'Avg days', n: 1, fmt: r => (r.avgd == null ? '–' : fmt(r.avgd, 0)) }
+        ], byLoc, { sortKey: 'over', sortDir: 'desc', tall: true })}</div>
         <div class="grid-2" style="margin-top:14px">
           <div><h3>Still to be inducted <span class="pill bad">${fmt(pend.length)}</span></h3>${table('fo-pend', [
             { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
-            { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'since', label: 'Days since', n: 1, fmt: r => (r.since > 7 ? `<span class="stale">${fmt(r.since)}</span>` : fmt(r.since)) }, { key: 'mobile', label: 'Mobile', cls: 'mono' }
-          ], pend, { sortKey: 'since', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
+            { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) },
+            { key: 'since', label: 'Days since', n: 1 },
+            { key: 'left', label: 'Status', n: 1, fmt: r => (r.left < 0 ? `<span class="pill bad">overdue ${fmt(-r.left)}d</span>` : r.since <= BH_DAYS ? `<span class="pill neutral">branch: ${fmt(BH_DAYS - r.since)}d left</span>` : `<span class="pill warn">L&amp;D: ${fmt(r.left)}d left</span>`) },
+            { key: 'mobile', label: 'Mobile', cls: 'mono' }
+          ], pend, { sortKey: 'left', sortDir: 'asc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
           <div><h3>Inducted</h3>${table('fo-ind', [
             { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
             { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'indDate', label: 'Inducted', fmt: r => dShort(r.indDate) },
-            { key: 'd', label: 'Days', n: 1, fmt: r => (r.d <= 0 ? '<span class="pill good">on/before joining</span>' : r.d <= 7 ? `<span class="pill good">${r.d}</span>` : r.d <= 30 ? `<span class="pill warn">${r.d}</span>` : `<span class="pill bad">${r.d}</span>`) },
+            { key: 'd', label: 'Days', n: 1, fmt: r => `<span class="pill ${r.d <= BH_DAYS ? 'good' : r.d <= LD_DAYS ? 'warn' : 'bad'}">${r.d === 0 ? 'same day' : r.d}</span>` },
             { key: 'by', label: 'By' }
           ], ind, { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
         </div>
-        <p class="note">Only chauffeurs with a date of joining from ${esc(dShort(M.fyStart))} are counted. "On/before joining" = the induction date is on or before the date of joining in the master.</p></section>
+        <p class="note">Joiners = chauffeurs with a date of joining from ${esc(dShort(M.fyStart))}. Induction = the first session of any induction module (Smart Chauffeur Induction, Saksham…), whoever delivered it. Green = within 7 days (branch), amber = 8–30 days (L&amp;D), red = after 30 days.</p></section>
 
       <section class="panel"><div class="panel-head"><h2>2. Topics trained, location-wise</h2><p class="muted">Chauffeurs trained in each module (% of the location's chauffeurs) · ${esc(M.fyLabel)}</p></div>
         <div class="table-wrap tall"><table><thead><tr><th>Location</th><th class="n">Chauffeurs</th><th class="n">Trained (any)</th>${mods.map(m => `<th class="n" title="${esc(m)}">${esc(modShort(m))}</th>`).join('')}</tr></thead><tbody>
@@ -1299,10 +1311,12 @@
       if (!window.XLSX) return toast('Please wait a moment and try again.');
       track('Exported Excel', 'Focus · ' + f.loc);
       const wb = XLSX.utils.book_new(), add = (n, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), n);
-      add('Induction by location', [['Location', 'New joiners', 'Inducted', '% inducted', 'Within 7 days', '8-30 days', 'Over 30 days', 'Avg days', 'Pending']]
-        .concat(byLoc.sort((x, y) => y.pend - x.pend).map(r => [r.loc, r.n, r.ind, Math.round(r.pct * 1000) / 10, r.w7, r.w30, r.late, r.avgd == null ? '' : Math.round(r.avgd), r.pend])));
-      add('Induction pending', [['Location', 'Code', 'Chauffeur', 'Mobile', 'Date of joining', 'Days since joining']].concat(pend.sort((x, y) => y.since - x.since).map(j => [j.loc, j.code, j.name, j.mobile, j.doj, j.since])));
-      add('Inducted', [['Location', 'Code', 'Chauffeur', 'Date of joining', 'Induction date', 'Days', 'Inducted by']].concat(ind.map(j => [j.loc, j.code, j.name, j.doj, j.indDate, j.d, j.by])));
+      add('Induction by location', [['Location', 'New joiners', `Within ${BH_DAYS} days (branch)`, `Missed ${BH_DAYS} days`, `Within ${LD_DAYS} days (L&D)`, `% within ${LD_DAYS}`, 'Late', 'Still in time', 'Overdue', 'Avg days to induction']]
+        .concat(byLoc.sort((x, y) => y.over - x.over).map(r => [r.loc, r.n, r.bhOk, r.bhOver, r.ldOk, Math.round(r.pct * 1000) / 10, r.late, r.due, r.over, r.avgd == null ? '' : Math.round(r.avgd)])));
+      add('Induction pending', [['Location', 'Code', 'Chauffeur', 'Mobile', 'Date of joining', 'Days since joining', 'Status']]
+        .concat(pend.sort((x, y) => x.left - y.left).map(j => [j.loc, j.code, j.name, j.mobile, j.doj, j.since, j.left < 0 ? `overdue ${-j.left} days` : j.since <= BH_DAYS ? `branch: ${BH_DAYS - j.since} days left` : `L&D: ${j.left} days left`])));
+      add('Inducted', [['Location', 'Code', 'Chauffeur', 'Date of joining', 'Induction date', 'Days', `Within ${BH_DAYS} days (branch)`, `Within ${LD_DAYS} days (L&D)`, 'Inducted by']]
+        .concat(ind.map(j => [j.loc, j.code, j.name, j.doj, j.indDate, j.d, j.d <= BH_DAYS ? 'Yes' : 'No', j.d <= LD_DAYS ? 'Yes' : 'No', j.by])));
       add('Topics by location', [['Location', 'Chauffeurs', 'Trained (any)'].concat(mods)].concat(locs.map(l => [l, locN[l] || 0, (trained[l] || new Set()).size].concat(mods.map(m => (cell[l + '|' + m] || new Set()).size)))));
       add('Who delivered', [['Module', 'L&D', 'Chauffeurs trained']].concat(...mods.filter(m => trBy[m]).map(m => Object.entries(trBy[m]).map(([t, s]) => [m, t, s.size]))));
       add('Chauffeur topics', [['Location', 'Code', 'Chauffeur', 'Trainings'].concat(mods.map(m => m + ' (L&D · date)'), ['Still to do'])]
