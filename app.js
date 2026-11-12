@@ -146,7 +146,7 @@
   }
   function viewDetail() {
     const v = S.view, f = S.chf || {}, e = S.enf || {}, fb = S.fbf || {};
-    const name = { dashboard: 'Dashboard', locations: 'Location Card', chauffeurs: 'Chauffeur Master', feedback: 'Feedback', kra: 'Target', add: 'Add Training', entries: 'Entries', admin: 'Admin' }[v] || v;
+    const name = { dashboard: 'Dashboard', locations: 'Location Card', chauffeurs: 'Chauffeur Master', feedback: 'Feedback', focus: 'Focus', kra: 'Target', add: 'Add Training', entries: 'Entries', admin: 'Admin' }[v] || v;
     const bits = v === 'dashboard' ? [S.dashLoc && S.dashLoc !== 'All' ? S.dashLoc : 'All locations']
       : v === 'locations' ? [S.cardLoc || (S.M && S.M.locations[0]) || ''] : v === 'chauffeurs' ? [f.loc && f.loc !== 'All' ? f.loc : '', f.q || '']
       : v === 'feedback' ? [fb.loc && fb.loc !== 'All' ? fb.loc : '', fb.tr && fb.tr !== 'All' ? fb.tr : '']
@@ -322,7 +322,7 @@
 
   /* Routing: every screen has an address (#/chauffeurs?loc=PUNE&st=Not%20trained), so Back/Forward,
      refresh and shared links open the same data. Tiles and table rows call go() to jump to the matching list. */
-  const VIEWS = ['dashboard', 'locations', 'chauffeurs', 'feedback', 'kra', 'add', 'entries', 'admin'];
+  const VIEWS = ['dashboard', 'locations', 'chauffeurs', 'feedback', 'focus', 'kra', 'add', 'entries', 'admin'];
   const chfDefault = () => ({ q: '', loc: 'All', act: 'All', st: 'All', cat: 'All', type: 'All', mod: 'All', inc: 'All' });
   // Active unless the master gives a leaving date or a status such as Left / Inactive / Resigned
   const isActive = c => !c.dol && !/left|inactive|resign|abscond|terminat/i.test(c.status || '');
@@ -395,7 +395,7 @@
     if ((S.view === 'add' || S.view === 'entries') && S.user.role === 'viewer') S.view = 'dashboard';
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === S.view));
     destroyCharts();
-    const views = { dashboard: viewDashboard, locations: viewLocation, chauffeurs: viewChauffeurs, feedback: viewFeedback, kra: viewKra, add: viewAdd, entries: viewEntries, admin: viewAdmin };
+    const views = { dashboard: viewDashboard, locations: viewLocation, chauffeurs: viewChauffeurs, feedback: viewFeedback, focus: viewFocus, kra: viewKra, add: viewAdd, entries: viewEntries, admin: viewAdmin };
     (views[S.view] || viewDashboard)();
     track('Viewed', viewDetail());
     if (S.view === 'dashboard' || S.view === 'locations') welcome();
@@ -1189,6 +1189,128 @@
         const out = await api('uploadSheet', { date: x.date, module: x.module, trainer: x.trainer, files: payload });
         M.d.sheets = out.sheets; toast(`Saved ${out.saved} file(s) for ${dShort(x.date)} ${x.module}`); render();
       } catch (err) { if (err.message !== 'AUTH') { $('#sh-msg').innerHTML = `<span class="form-error">${esc(err.message)}</span>`; $('#sh-pick').disabled = false; } }
+    };
+  }
+
+  /* ---------------------------------------------------------------- Focus: targeted training */
+  // 1) New joiners since the FY start: induction received, and how many days after joining.
+  // 2) Topics: per location, how many chauffeurs did each module and who delivered it; per chauffeur, done and still to do.
+  const INDUCTION_RE = /induction/i;
+  function focusData(loc, activeOnly) {
+    const M = S.M, fy = M.fyStart, today = todayIso();
+    const chs = M.scoped.filter(c => (loc === 'All' || c.loc === loc) && (!activeOnly || isActive(c)));
+    const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+    const joiners = chs.filter(c => c.doj && c.doj >= fy && c.doj <= today).map(c => {
+      const ind = c.att.filter(a => INDUCTION_RE.test(a.module)).sort((x, y) => x.date.localeCompare(y.date))[0];
+      const d = ind ? days(c.doj, ind.date) : null;
+      return { c, code: c.code, name: c.name, loc: c.loc, doj: c.doj, mobile: c.mobile, ind, indDate: ind ? ind.date : '', by: ind ? ind.trainer : '', d,
+        band: !ind ? 'pending' : d <= 0 ? 'before' : d <= 7 ? 'w7' : d <= 30 ? 'w30' : 'late', since: days(c.doj, today) };
+    });
+    const mods = masterMods().map(m => m.name);
+    return { chs, joiners, mods };
+  }
+  function viewFocus() {
+    const M = S.M, f = S.foc = S.foc || { loc: 'All', act: true, tloc: '' };
+    const { chs, joiners, mods } = focusData(f.loc, f.act);
+    const ind = joiners.filter(j => j.ind), pend = joiners.filter(j => !j.ind);
+    const w7 = joiners.filter(j => j.band === 'before' || j.band === 'w7').length;
+    const avgD = ind.length ? avg(ind.map(j => Math.max(0, j.d))) : null;
+    const byLoc = Array.from(groupBy(joiners, j => j.loc).entries()).map(([loc, l]) => {
+      const i = l.filter(j => j.ind);
+      return { loc, n: l.length, ind: i.length, pct: l.length ? i.length / l.length : 0, w7: l.filter(j => j.band === 'before' || j.band === 'w7').length,
+        w30: l.filter(j => j.band === 'w30').length, late: l.filter(j => j.band === 'late').length, pend: l.length - i.length, avgd: i.length ? avg(i.map(j => Math.max(0, j.d))) : null };
+    });
+    // topics: unique chauffeurs per module per location, and who delivered it
+    const inSet = new Set(chs), att = M.fyAtt.filter(a => inSet.has(a.c));
+    const locs = Array.from(new Set(chs.map(c => c.loc))).sort();
+    const cell = {}; const trBy = {};
+    att.forEach(a => {
+      const k = a.loc + '|' + a.module; (cell[k] = cell[k] || new Set()).add(a.code);
+      const t = (trBy[a.module] = trBy[a.module] || {}); (t[a.trainer] = t[a.trainer] || new Set()).add(a.code);
+    });
+    const locN = {}; chs.forEach(c => { locN[c.loc] = (locN[c.loc] || 0) + 1; });
+    const trained = {}; att.forEach(a => { (trained[a.loc] = trained[a.loc] || new Set()).add(a.code); });
+    const tloc = f.tloc && locs.includes(f.tloc) ? f.tloc : (f.loc !== 'All' ? f.loc : locs[0] || '');
+    const tch = chs.filter(c => c.loc === tloc).map(c => {
+      const fy = c.att.filter(a => a.inFY);
+      const done = {}; fy.forEach(a => { (done[a.module] = done[a.module] || []).push(a); });
+      return { code: c.code, name: c.name, n: fy.length, done, todo: mods.filter(m => !done[m]), c };
+    });
+    const pctCls = p => (p >= 0.6 ? 'good' : p >= 0.3 ? 'warn' : 'bad');
+    $('#main').innerHTML = `
+      <div class="view-head"><div><h1>Focus</h1><p class="muted">Targeted training: new-joiner induction and topics covered, location-wise · ${esc(M.fyLabel)}</p></div>
+        <div class="filters">${select('fo-loc', 'Location', ['All'].concat(M.locations), f.loc)}
+          <div class="field" style="width:auto"><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center;font-size:.9rem;color:var(--ink)"><input type="checkbox" id="fo-act" style="width:auto"${f.act ? ' checked' : ''}> Active chauffeurs only</label></div>
+          <div class="field" style="width:auto"><label>&nbsp;</label><button class="btn" id="fo-xls" type="button">Download (Excel)</button></div></div></div>
+
+      <section class="panel"><div class="panel-head"><h2>1. New joiners since ${esc(dShort(M.fyStart))}: induction</h2><p class="muted">Days = first induction date − date of joining · target: within 7 days</p></div>
+        ${kpis([
+          { label: 'New joiners', value: fmt(joiners.length), sub: f.loc === 'All' ? 'all locations' : f.loc },
+          { label: 'Inducted', value: fmt(ind.length), sub: pct(ind.length, joiners.length, 1) + ' of joiners', cls: 'good' },
+          { label: 'Within 7 days', value: fmt(w7), sub: pct(w7, joiners.length, 1) + ' of joiners' },
+          { label: 'Average days', value: avgD == null ? '–' : fmt(avgD, 0), sub: 'joining to induction' },
+          { label: 'Still to be inducted', value: fmt(pend.length), sub: 'call these first', cls: pend.length ? 'bad' : '' }
+        ])}
+        <div style="margin-top:14px">${table('fo-loct', [
+          { key: 'loc', label: 'Location' }, { key: 'n', label: 'Joiners', n: 1 }, { key: 'ind', label: 'Inducted', n: 1 },
+          { key: 'pct', label: '% inducted', n: 1, fmt: r => `<span class="pill ${pctCls(r.pct)}">${pctv(r.pct, 0)}</span>` },
+          { key: 'w7', label: '≤ 7 days', n: 1, title: 'Inducted on or within 7 days of joining' }, { key: 'w30', label: '8–30 days', n: 1 }, { key: 'late', label: '> 30 days', n: 1 },
+          { key: 'avgd', label: 'Avg days', n: 1, fmt: r => (r.avgd == null ? '–' : fmt(r.avgd, 0)) },
+          { key: 'pend', label: 'Pending', n: 1, fmt: r => (r.pend ? `<span class="pill bad">${fmt(r.pend)}</span>` : '0') }
+        ], byLoc, { sortKey: 'pend', sortDir: 'desc', tall: true })}</div>
+        <div class="grid-2" style="margin-top:14px">
+          <div><h3>Still to be inducted <span class="pill bad">${fmt(pend.length)}</span></h3>${table('fo-pend', [
+            { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
+            { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'since', label: 'Days since', n: 1, fmt: r => (r.since > 7 ? `<span class="stale">${fmt(r.since)}</span>` : fmt(r.since)) }, { key: 'mobile', label: 'Mobile', cls: 'mono' }
+          ], pend, { sortKey: 'since', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
+          <div><h3>Inducted</h3>${table('fo-ind', [
+            { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
+            { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'indDate', label: 'Inducted', fmt: r => dShort(r.indDate) },
+            { key: 'd', label: 'Days', n: 1, fmt: r => (r.d <= 0 ? '<span class="pill good">on/before joining</span>' : r.d <= 7 ? `<span class="pill good">${r.d}</span>` : r.d <= 30 ? `<span class="pill warn">${r.d}</span>` : `<span class="pill bad">${r.d}</span>`) },
+            { key: 'by', label: 'By' }
+          ], ind, { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
+        </div>
+        <p class="note">Only chauffeurs with a date of joining from ${esc(dShort(M.fyStart))} are counted. "On/before joining" = the induction date is on or before the date of joining in the master.</p></section>
+
+      <section class="panel"><div class="panel-head"><h2>2. Topics trained, location-wise</h2><p class="muted">Chauffeurs trained in each module (% of the location's chauffeurs) · ${esc(M.fyLabel)}</p></div>
+        <div class="table-wrap tall"><table><thead><tr><th>Location</th><th class="n">Chauffeurs</th><th class="n">Trained (any)</th>${mods.map(m => `<th class="n" title="${esc(m)}">${esc(modShort(m))}</th>`).join('')}</tr></thead><tbody>
+          ${locs.map(l => `<tr class="click" data-tloc="${esc(l)}"><td><b>${esc(l)}</b></td><td class="n">${fmt(locN[l] || 0)}</td><td class="n">${fmt((trained[l] || new Set()).size)} <small class="muted">${pct((trained[l] || new Set()).size, locN[l], 0)}</small></td>
+            ${mods.map(m => { const n = (cell[l + '|' + m] || new Set()).size, p = locN[l] ? n / locN[l] : 0; return `<td class="n">${n ? `${fmt(n)} <span class="pill ${pctCls(p)}">${pctv(p, 0)}</span>` : '<span class="muted">–</span>'}</td>`; }).join('')}</tr>`).join('')}
+        </tbody></table></div>
+        <h3 style="margin-top:16px">Who delivered each module${f.loc === 'All' ? '' : ' · ' + esc(f.loc)}</h3>
+        ${table('fo-who', [{ key: 'm', label: 'Module' }, { key: 'n', label: 'Chauffeurs', n: 1 }, { key: 'by', label: 'Delivered by (chauffeurs trained)', fmt: r => r.by }],
+          mods.filter(m => trBy[m]).map(m => { const t = trBy[m], tot = new Set([].concat(...Object.values(t).map(s => Array.from(s)))).size;
+            return { m, n: tot, by: Object.entries(t).sort((x, y) => y[1].size - x[1].size).map(([tr, s]) => `<span class="pill neutral" style="margin:1px 4px 1px 0">${esc(tr)} · ${fmt(s.size)}</span>`).join('') }; }), { sortKey: 'n', sortDir: 'desc' })}
+        <h3 style="margin-top:16px">Chauffeurs at ${esc(tloc)}: done and still to do</h3>
+        <div class="filters compact">${select('fo-tloc', 'Location', locs, tloc)}</div>
+        ${table('fo-ch', [
+          { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` }, { key: 'n', label: 'Trainings', n: 1 },
+          { key: 'doneTxt', label: 'Done (module · L&D · date)', fmt: r => Object.entries(r.done).map(([m, l]) => `<span class="pill good" style="margin:1px 4px 1px 0" title="${esc(m)}">${esc(modShort(m))} · ${esc(l[0].trainer)} · ${esc(dShort(l[0].date))}</span>`).join('') || '<span class="pill bad">not trained</span>' },
+          { key: 'todoN', label: 'Still to do', n: 1, fmt: r => `<span title="${esc(r.todo.join(', '))}">${fmt(r.todo.length)}</span> <small class="muted">${esc(r.todo.map(modShort).join(', '))}</small>` }
+        ], tch.map(r => Object.assign(r, { doneTxt: Object.keys(r.done).join(','), todoN: r.todo.length })), { sortKey: 'n', sortDir: 'asc', tall: true, limit: 600, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}
+      </section>`;
+    $('#fo-loc').onchange = e => { f.loc = e.target.value; f.tloc = ''; render(); };
+    $('#fo-act').onchange = e => { f.act = e.target.checked; render(); };
+    $('#fo-tloc').onchange = e => { f.tloc = e.target.value; render(); };
+    $$('#main tr[data-tloc]').forEach(tr => tr.onclick = () => { f.tloc = tr.dataset.tloc; render(); setTimeout(() => { const el = $('#fo-tloc'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50); });
+    $$('#main tr[data-code]').forEach(tr => tr.onclick = () => openChauffeur(tr.dataset.code));
+    wireSort($('#main'), render);
+    $('#fo-xls').onclick = () => {
+      if (!window.XLSX) return toast('Please wait a moment and try again.');
+      track('Exported Excel', 'Focus · ' + f.loc);
+      const wb = XLSX.utils.book_new(), add = (n, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), n);
+      add('Induction by location', [['Location', 'New joiners', 'Inducted', '% inducted', 'Within 7 days', '8-30 days', 'Over 30 days', 'Avg days', 'Pending']]
+        .concat(byLoc.sort((x, y) => y.pend - x.pend).map(r => [r.loc, r.n, r.ind, Math.round(r.pct * 1000) / 10, r.w7, r.w30, r.late, r.avgd == null ? '' : Math.round(r.avgd), r.pend])));
+      add('Induction pending', [['Location', 'Code', 'Chauffeur', 'Mobile', 'Date of joining', 'Days since joining']].concat(pend.sort((x, y) => y.since - x.since).map(j => [j.loc, j.code, j.name, j.mobile, j.doj, j.since])));
+      add('Inducted', [['Location', 'Code', 'Chauffeur', 'Date of joining', 'Induction date', 'Days', 'Inducted by']].concat(ind.map(j => [j.loc, j.code, j.name, j.doj, j.indDate, j.d, j.by])));
+      add('Topics by location', [['Location', 'Chauffeurs', 'Trained (any)'].concat(mods)].concat(locs.map(l => [l, locN[l] || 0, (trained[l] || new Set()).size].concat(mods.map(m => (cell[l + '|' + m] || new Set()).size)))));
+      add('Who delivered', [['Module', 'L&D', 'Chauffeurs trained']].concat(...mods.filter(m => trBy[m]).map(m => Object.entries(trBy[m]).map(([t, s]) => [m, t, s.size]))));
+      add('Chauffeur topics', [['Location', 'Code', 'Chauffeur', 'Trainings'].concat(mods.map(m => m + ' (L&D · date)'), ['Still to do'])]
+        .concat(chs.slice().sort((x, y) => x.loc.localeCompare(y.loc) || x.name.localeCompare(y.name)).map(c => {
+          const fyA = c.att.filter(a => a.inFY), done = {}; fyA.forEach(a => { (done[a.module] = done[a.module] || []).push(a); });
+          return [c.loc, c.code, c.name, fyA.length].concat(mods.map(m => (done[m] ? done[m].map(a => `${a.trainer} · ${a.date}`).join('; ') : '')), [mods.filter(m => !done[m]).join(', ')]);
+        })));
+      XLSX.writeFile(wb, `Focus_training_${f.loc.replace(/\W+/g, '_')}_${todayIso()}.xlsx`);
     };
   }
 
