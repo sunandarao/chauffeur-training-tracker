@@ -744,6 +744,11 @@
         ${select('f-mod', 'Module', modOpts, f.mod)}
         ${M.hasInc ? select('f-inc', 'Incidents', ['All', 'With incidents', 'No incidents'], f.inc) : ''}
       </div>
+      ${(() => { // say plainly when the numbers below are filtered
+        const d = chfDefault(), lab = { q: 'Search', loc: 'Location', act: 'Status', st: 'Training status', cat: 'Category', type: 'Driver type', mod: 'Module', inc: 'Incidents' };
+        const on = Object.keys(d).filter(k => f[k] != null && f[k] !== d[k]).map(k => `${lab[k] || k}: <b>${esc(k === 'mod' ? String(f[k]).replace(/^done:/, 'Done: ').replace(/^not:/, 'Not done: ') : f[k])}</b>`);
+        return on.length ? `<p class="warn-box" style="margin:0 0 10px">Filtered: ${on.join(' · ')}. The numbers below count only these chauffeurs (of ${fmt(M.chList.length)} in the master). <button class="linkbtn" id="m-reset2" type="button" style="padding:0">Clear filters</button></p>` : '';
+      })()}
       <div class="mstats">
         <div class="ms link${f.st === 'All' ? ' on' : ''}" ${msGo('All')}><span class="ms-l">Chauffeurs ›</span><span class="ms-v">${fmt(list.length)}</span><span class="ms-s">${fmt(list.filter(isActive).length)} active</span></div>
         <div class="ms link${f.st === 'Trained' ? ' on' : ''}" ${msGo('Trained')}><span class="ms-l">Trained ›</span><span class="ms-v good">${fmt(trained)}</span><span class="ms-s">in FY scope</span></div>
@@ -758,6 +763,7 @@
     fq.oninput = () => { f.q = fq.value; S.chLimit = 500; const p = fq.selectionStart; render(); const n = $('#f-q'); n.focus(); n.setSelectionRange(p, p); };
     ['loc', 'act', 'st', 'cat', 'type', 'mod', 'inc'].forEach(k => { const el = $('#f-' + k); if (el) el.onchange = e => { f[k] = e.target.value; S.chLimit = 500; render(); }; });
     $('#m-reset').onclick = () => go('chauffeurs', {});
+    if ($('#m-reset2')) $('#m-reset2').onclick = () => $('#m-reset').click();
     if ($('#m-more')) $('#m-more').onclick = () => { S.chLimit = limit + 500; render(); };
     if ($('#m-dl')) $('#m-dl').onclick = () => downloadMaster(cols, rows);
     $$('#main tr[data-code]').forEach(tr => tr.onclick = () => openChauffeur(tr.dataset.code));
