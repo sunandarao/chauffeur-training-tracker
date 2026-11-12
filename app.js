@@ -517,11 +517,12 @@
   function viewDashboard() {
     const M = S.M;
     const loc = S.dashLoc || 'All';
-    const chs = M.scoped.filter(c => loc === 'All' || c.loc === loc);
-    const atts = M.fyAtt.filter(a => loc === 'All' || a.loc === loc);
+    const actCh = M.scoped.filter(isActive), actAtt = M.fyAtt.filter(a => isActive(a.c)); // first tab: inactive chauffeurs left out
+    const chs = actCh.filter(c => loc === 'All' || c.loc === loc);
+    const atts = actAtt.filter(a => loc === 'All' || a.loc === loc);
     const s = summarize(chs, atts);
     const locRows = M.locations.map(l => {
-      const c = M.scoped.filter(x => x.loc === l); const a = M.fyAtt.filter(x => x.loc === l); const t = c.filter(x => x.n > 0).length;
+      const c = actCh.filter(x => x.loc === l); const a = actAtt.filter(x => x.loc === l); const t = c.filter(x => x.n > 0).length;
       return { loc: l, chauffeurs: c.length, trained: t, cov: c.length ? t / c.length : 0, att: a.length, hours: a.reduce((q, x) => q + x.mins, 0) / 60 };
     });
     const split = (key, keys) => keys.map(k => {
@@ -535,22 +536,22 @@
     const viewer = S.user.role === 'viewer';
     const L = loc === 'All' ? undefined : loc;
     const kGo = {
-      total: ['chauffeurs', { loc: L, st: 'In FY scope' }], unique: ['chauffeurs', { loc: L, st: 'Trained' }], never: ['chauffeurs', { loc: L, st: 'Not trained' }],
-      att: viewer ? ['chauffeurs', { loc: L, st: 'Trained', sort: 'n' }] : ['entries', { loc: L, from: M.fyStart, to: M.fyEnd }],
-      hours: ['chauffeurs', { loc: L, st: 'Trained', sort: 'hrs' }], fb: ['feedback', { loc: L }] };
+      total: ['chauffeurs', { loc: L, act: 'Active', st: 'In FY scope' }], unique: ['chauffeurs', { loc: L, act: 'Active', st: 'Trained' }], never: ['chauffeurs', { loc: L, act: 'Active', st: 'Not trained' }],
+      att: viewer ? ['chauffeurs', { loc: L, act: 'Active', st: 'Trained', sort: 'n' }] : ['entries', { loc: L, from: M.fyStart, to: M.fyEnd }],
+      hours: ['chauffeurs', { loc: L, act: 'Active', st: 'Trained', sort: 'hrs' }], fb: ['feedback', { loc: L }] };
 
     $('#main').innerHTML = `
       <div class="quick">
         ${viewer ? '' : `<button class="qa qa-main" type="button" ${goAttr('add', {})}>${ICON.add}<span><b>Record a session</b><small>Add today's training</small></span></button>`}
-        <button class="qa" type="button" ${goAttr('chauffeurs', { loc: L, st: 'Not trained' })}>${ICON.chauffeurs}<span><b>Who is not trained</b><small>${fmt(s.never)} chauffeurs to call</small></span></button>
+        <button class="qa" type="button" ${goAttr('chauffeurs', { loc: L, act: 'Active', st: 'Not trained' })}>${ICON.chauffeurs}<span><b>Who is not trained</b><small>${fmt(s.never)} chauffeurs to call</small></span></button>
         ${viewer ? `<button class="qa" type="button" ${goAttr('feedback', { loc: L })}>${ICON.feedback}<span><b>Chauffeur feedback</b><small>Ratings by L&amp;D and module</small></span></button>`
           : `<button class="qa" type="button" id="qa-qr">${ICON.qr}<span><b>Feedback QR</b><small>Show or download the QR</small></span></button>`}
         <button class="qa" type="button" ${goAttr('locations', { loc: L || (S.cardLoc || '') })}>${ICON.locations}<span><b>Location cards</b><small>Coverage and ranking</small></span></button>
       </div>
-      <div class="view-head"><div><h1>Training Dashboard</h1><p class="muted">${esc(M.fyLabel)} · ${dShort(M.fyStart)} to ${dShort(M.fyEnd)} · last training logged ${dShort(last)}</p></div>
+      <div class="view-head"><div><h1>Training Dashboard</h1><p class="muted">${esc(M.fyLabel)} · ${dShort(M.fyStart)} to ${dShort(M.fyEnd)} · last training logged ${dShort(last)} · active chauffeurs only</p></div>
         <div class="filters">${select('f-dloc', 'Location', ['All'].concat(M.locations), loc)}</div></div>
       ${kpis([
-        { label: 'Total Chauffeurs', value: fmt(s.chauffeurs), sub: 'Effective ' + longDate(M.fyStart), go: kGo.total },
+        { label: 'Active Chauffeurs', value: fmt(s.chauffeurs), sub: 'Inactive not counted · ' + fmt(M.scoped.filter(c => !isActive(c) && (loc === 'All' || c.loc === loc)).length) + ' left out', go: kGo.total },
         { label: 'Unique', value: fmt(s.trained), sub: pct(s.trained, s.chauffeurs, 1) + ' coverage', cls: s.chauffeurs ? ({ good: 'good', warn: 'warn', bad: 'bad' })[covStatus(s.trained / s.chauffeurs)] : '', go: kGo.unique },
         { label: 'Chauffeurs in Scope', value: fmt(s.never), sub: pct(s.never, s.chauffeurs, 1) + ' of chauffeurs', cls: s.never ? 'bad' : '', go: kGo.never },
         { label: 'Attendees', value: fmt(s.attendances), sub: fmt(sessionsOf(atts)) + ' sessions', go: kGo.att },
@@ -576,11 +577,11 @@
         <section class="panel"><div class="panel-head"><h2>Modules</h2></div>${table('mod', [
           { key: 'module', label: 'Module' }, { key: 'dur', label: 'Duration', n: 1, fmt: r => r.dur + ' min' }, { key: 'att', label: 'Participants', n: 1, fmt: r => fmt(r.att) },
           { key: 'people', label: 'Unique', n: 1, fmt: r => fmt(r.people) }, { key: 'hours', label: 'Manhours', n: 1, fmt: r => fmt(r.hours, 1) }
-        ], mods, { sortKey: 'hours', sortDir: 'desc', rowAttr: r => 'class="click" ' + goAttr('chauffeurs', { loc: L, st: 'In FY scope', mod: 'not:' + r.module }) })}</section>
+        ], mods, { sortKey: 'hours', sortDir: 'desc', rowAttr: r => 'class="click" ' + goAttr('chauffeurs', { loc: L, act: 'Active', st: 'In FY scope', mod: 'not:' + r.module }) })}</section>
       </div>
       <div class="grid-2 split2">
-        <section class="panel"><div class="panel-head"><h2>Category-wise</h2></div>${splitTable('cat', split('cat', CATS), 'Category', k => goAttr('chauffeurs', { loc: L, st: 'In FY scope', cat: k }))}</section>
-        <section class="panel"><div class="panel-head"><h2>Chauffeur Type</h2></div>${splitTable('typ', split('type', types), 'Type', k => goAttr('chauffeurs', { loc: L, st: 'In FY scope', type: k }))}</section>
+        <section class="panel"><div class="panel-head"><h2>Category-wise</h2></div>${splitTable('cat', split('cat', CATS), 'Category', k => goAttr('chauffeurs', { loc: L, act: 'Active', st: 'In FY scope', cat: k }))}</section>
+        <section class="panel"><div class="panel-head"><h2>Chauffeur Type</h2></div>${splitTable('typ', split('type', types), 'Type', k => goAttr('chauffeurs', { loc: L, act: 'Active', st: 'In FY scope', type: k }))}</section>
       </div>`;
     $('#f-dloc').onchange = e => { S.dashLoc = e.target.value; render(); };
     if ($('#qa-qr')) $('#qa-qr').onclick = () => collectFeedback([]);
