@@ -462,3 +462,4 @@ tfoot td { background: var(--accent-soft); border-top: 2px solid var(--line); }
   .lp-gal { grid-auto-rows: 120px; gap: 8px; } .g figcaption { font-size: .72rem; padding: 18px 8px 8px; }
 }
 #app-name small { display: block; font: 700 .7rem/1.2 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+.kpi.link.on { background: var(--accent-soft); box-shadow: inset 0 -3px 0 var(--brand); }

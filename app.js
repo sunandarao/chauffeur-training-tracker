@@ -1219,6 +1219,11 @@
     const { chs, joiners, mods } = focusData(f.loc, f.act);
     const ind = joiners.filter(j => j.ind), pend = joiners.filter(j => !j.ind);
     const cnt = (l, k, v) => l.filter(j => j[k] === v).length;
+    const band = f.band || '', bandLabel = { w7: `inducted within ${BH_DAYS} days`, w30: `inducted within ${LD_DAYS} days`, late: `inducted after ${LD_DAYS} days`,
+      due: 'not yet inducted, still in time', overdue: `overdue: no induction after ${LD_DAYS} days`, ind: 'all inducted' };
+    const showPend = !band || band === 'due' || band === 'overdue', showInd = !band || ['w7', 'w30', 'late', 'ind'].includes(band);
+    const pendL = pend.filter(j => !band || j.ldSt === band);
+    const indL = ind.filter(j => !band || band === 'ind' || (band === 'w7' ? j.d <= BH_DAYS : band === 'w30' ? j.d <= LD_DAYS : j.d > LD_DAYS));
     const avgD = ind.length ? avg(ind.map(j => j.d)) : null;
     const byLoc = Array.from(groupBy(joiners, j => j.loc).entries()).map(([loc, l]) => {
       const i = l.filter(j => j.ind);
@@ -1251,14 +1256,14 @@
 
       <section class="panel"><div class="panel-head"><h2>1. New joiners since ${esc(dShort(M.fyStart))}: induction</h2><p class="muted">Induction targets: <b>branch within ${BH_DAYS} days</b> of joining · <b>L&amp;D at the latest within ${LD_DAYS} days</b></p></div>
         ${kpis([
-          { label: 'New joiners', value: fmt(joiners.length), sub: f.loc === 'All' ? 'all locations' : f.loc },
-          { label: `Within ${BH_DAYS} days`, value: fmt(cnt(joiners, 'bhSt', 'ontime')), sub: pct(cnt(joiners, 'bhSt', 'ontime'), joiners.length, 1) + ' · branch target', cls: 'good' },
-          { label: `Within ${LD_DAYS} days`, value: fmt(cnt(joiners, 'ldSt', 'ontime')), sub: pct(cnt(joiners, 'ldSt', 'ontime'), joiners.length, 1) + ' · L&D target', cls: 'good' },
-          { label: 'Inducted late', value: fmt(cnt(joiners, 'ldSt', 'late')), sub: `after ${LD_DAYS} days`, cls: 'warn' },
-          { label: 'Not yet, still in time', value: fmt(cnt(joiners, 'ldSt', 'due')), sub: `joined in the last ${LD_DAYS} days` },
-          { label: 'Overdue', value: fmt(cnt(joiners, 'ldSt', 'overdue')), sub: `no induction after ${LD_DAYS} days`, cls: cnt(joiners, 'ldSt', 'overdue') ? 'bad' : '' },
-          { label: 'Average days', value: avgD == null ? '–' : fmt(avgD, 0), sub: 'joining to induction' }
-        ])}
+          { band: '', label: 'New joiners', value: fmt(joiners.length), sub: f.loc === 'All' ? 'all locations' : f.loc },
+          { band: 'w7', label: `Within ${BH_DAYS} days`, value: fmt(cnt(joiners, 'bhSt', 'ontime')), sub: pct(cnt(joiners, 'bhSt', 'ontime'), joiners.length, 1) + ' · branch target', cls: 'good' },
+          { band: 'w30', label: `Within ${LD_DAYS} days`, value: fmt(cnt(joiners, 'ldSt', 'ontime')), sub: pct(cnt(joiners, 'ldSt', 'ontime'), joiners.length, 1) + ' · L&D target', cls: 'good' },
+          { band: 'late', label: 'Inducted late', value: fmt(cnt(joiners, 'ldSt', 'late')), sub: `after ${LD_DAYS} days`, cls: 'warn' },
+          { band: 'due', label: 'Not yet, still in time', value: fmt(cnt(joiners, 'ldSt', 'due')), sub: `joined in the last ${LD_DAYS} days` },
+          { band: 'overdue', label: 'Overdue', value: fmt(cnt(joiners, 'ldSt', 'overdue')), sub: `no induction after ${LD_DAYS} days`, cls: cnt(joiners, 'ldSt', 'overdue') ? 'bad' : '' },
+          { band: 'ind', label: 'Average days', value: avgD == null ? '–' : fmt(avgD, 0), sub: 'joining to induction' }
+        ].map(k => Object.assign(k, { label: k.label + ' ›', cls: (k.cls || '') + ' link fo-band' + ((f.band || '') === k.band ? ' on' : '') })))}
         <div style="margin-top:14px">${table('fo-loct', [
           { key: 'loc', label: 'Location' }, { key: 'n', label: 'Joiners', n: 1 },
           { key: 'bhOk', label: `≤ ${BH_DAYS} days (branch)`, n: 1, title: 'Inducted within 7 days of joining' }, { key: 'bhOver', label: `Missed ${BH_DAYS} days`, n: 1, title: 'Not inducted within 7 days', fmt: r => (r.bhOver ? `<span class="pill warn">${fmt(r.bhOver)}</span>` : '0') },
@@ -1266,21 +1271,22 @@
           { key: 'late', label: 'Late', n: 1, title: 'Inducted after 30 days' }, { key: 'due', label: 'Still in time', n: 1, title: 'Joined in the last 30 days, not yet inducted' },
           { key: 'over', label: 'Overdue', n: 1, title: 'Over 30 days and no induction', fmt: r => (r.over ? `<span class="pill bad">${fmt(r.over)}</span>` : '0') },
           { key: 'avgd', label: 'Avg days', n: 1, fmt: r => (r.avgd == null ? '–' : fmt(r.avgd, 0)) }
-        ], byLoc, { sortKey: 'over', sortDir: 'desc', tall: true })}</div>
-        <div class="grid-2" style="margin-top:14px">
-          <div><h3>Still to be inducted <span class="pill bad">${fmt(pend.length)}</span></h3>${table('fo-pend', [
+        ], byLoc, { sortKey: 'over', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-floc="${esc(r.loc)}" title="Show only ${esc(r.loc)}"` })}</div>
+        <div id="fo-lists" class="${showPend && showInd ? 'grid-2' : ''}" style="margin-top:14px">
+          ${f.band ? `<p class="ok-box" style="grid-column:1/-1;margin:0 0 4px">Showing: <b>${esc(bandLabel[f.band])}</b>${f.loc === 'All' ? '' : ' · ' + esc(f.loc)} · <button class="linkbtn" id="fo-clear" type="button" style="padding:0">show everyone</button></p>` : ''}
+          ${showPend ? `<div><h3>Still to be inducted <span class="pill bad">${fmt(pendL.length)}</span></h3>${table('fo-pend', [
             { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
             { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) },
             { key: 'since', label: 'Days since', n: 1 },
             { key: 'left', label: 'Status', n: 1, fmt: r => (r.left < 0 ? `<span class="pill bad">overdue ${fmt(-r.left)}d</span>` : r.since <= BH_DAYS ? `<span class="pill neutral">branch: ${fmt(BH_DAYS - r.since)}d left</span>` : `<span class="pill warn">L&amp;D: ${fmt(r.left)}d left</span>`) },
             { key: 'mobile', label: 'Mobile', cls: 'mono' }
-          ], pend, { sortKey: 'left', sortDir: 'asc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
-          <div><h3>Inducted</h3>${table('fo-ind', [
+          ], pendL, { sortKey: 'left', sortDir: 'asc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
+          ${showInd ? `<div><h3>Inducted <span class="pill good">${fmt(indL.length)}</span></h3>${table('fo-ind', [
             { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
             { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'indDate', label: 'Inducted', fmt: r => dShort(r.indDate) },
             { key: 'd', label: 'Days', n: 1, fmt: r => `<span class="pill ${r.d <= BH_DAYS ? 'good' : r.d <= LD_DAYS ? 'warn' : 'bad'}">${r.d === 0 ? 'same day' : r.d}</span>` },
             { key: 'by', label: 'By' }
-          ], ind, { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>
+          ], indL, { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
         </div>
         <p class="note">Joiners = chauffeurs with a date of joining from ${esc(dShort(M.fyStart))}. Induction = the first session of any induction module (Smart Chauffeur Induction, Saksham…), whoever delivered it. Green = within 7 days (branch), amber = 8–30 days (L&amp;D), red = after 30 days.</p></section>
 
@@ -1302,6 +1308,11 @@
         ], tch.map(r => Object.assign(r, { doneTxt: Object.keys(r.done).join(','), todoN: r.todo.length })), { sortKey: 'n', sortDir: 'asc', tall: true, limit: 600, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}
       </section>`;
     $('#fo-loc').onchange = e => { f.loc = e.target.value; f.tloc = ''; render(); };
+    const toLists = () => setTimeout(() => { const el = $('#fo-lists'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); }, 30);
+    $$('#main .fo-band').forEach((el, i) => { const k = ['', 'w7', 'w30', 'late', 'due', 'overdue', 'ind'][i]; el.tabIndex = 0;
+      el.onclick = el.onkeydown = ev => { if (ev.type === 'keydown' && ev.key !== 'Enter') return; f.band = f.band === k ? '' : k; render(); if (f.band) toLists(); }; });
+    if ($('#fo-clear')) $('#fo-clear').onclick = () => { f.band = ''; render(); };
+    $$('#main tr[data-floc]').forEach(tr => tr.onclick = () => { f.loc = tr.dataset.floc; f.tloc = ''; render(); toLists(); });
     $('#fo-act').onchange = e => { f.act = e.target.checked; render(); };
     $('#fo-tloc').onchange = e => { f.tloc = e.target.value; render(); };
     $$('#main tr[data-tloc]').forEach(tr => tr.onclick = () => { f.tloc = tr.dataset.tloc; render(); setTimeout(() => { const el = $('#fo-tloc'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50); });
