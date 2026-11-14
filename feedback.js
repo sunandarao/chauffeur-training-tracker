@@ -15,6 +15,12 @@
   const S = { mode: linkId ? 'session' : 'common', step: linkId ? 'name' : 'who', q: [], err: '', search: '', who: {}, me: null, opts: null, session: null, pick: null, fatal: '' };
   const T = () => L[lang] || L.en;
 
+  // text for chauffeurs not yet in the master (shown in English + Hindi)
+  const NEWTXT = {
+    en: { noCode: 'I do not have a chauffeur code yet', notReg: 'Your details are not in our records yet. You can still give feedback: L&D will check and add it.', goOn: 'Continue without registration' },
+    hi: { noCode: 'मेरे पास अभी चालक कोड नहीं है', notReg: 'आपका रिकॉर्ड अभी हमारे पास नहीं है। आप फिर भी फ़ीडबैक दे सकते हैं, L&D इसे जाँचकर जोड़ देगा।', goOn: 'बिना रजिस्ट्रेशन आगे बढ़ें' }
+  };
+  ['en', 'hi'].forEach(k => { const u = window.FB_I18N[k].ui; if (!u.needNameMob) u.needNameMob = k === 'en' ? 'Please enter your name and 10-digit mobile number.' : 'कृपया अपना नाम और 10 अंकों का मोबाइल नंबर डालें।'; });
   const ERR = { FB_EXPIRED: 'expired', FB_INVALID: 'invalid', FB_CODE: 'wrongCode', FB_DONE: 'done', FB_BUSY: 'busy', FB_INCOMPLETE: 'answerAll' };
   async function call(payload) {
     let res;
@@ -46,7 +52,7 @@
 
     if (S.step === 'thanks') {
       app.innerHTML = `<div class="card"><div class="msg ok">${esc(t.ui.thanks)}</div><button class="btn btn-ghost" id="again" type="button">${esc(t.ui.another)}</button></div>`;
-      $('#again').onclick = () => { S.q = []; S.err = ''; S.me = null; S.who = {}; S.pick = null; S.search = ''; S.step = S.mode === 'session' ? 'name' : 'who'; render(); window.scrollTo(0, 0); };
+      $('#again').onclick = () => { S.q = []; S.err = ''; S.me = null; S.who = {}; S.unv = false; S.noCode = false; S.canSkip = false; S.pick = null; S.search = ''; S.step = S.mode === 'session' ? 'name' : 'who'; render(); window.scrollTo(0, 0); };
       return;
     }
 
@@ -56,20 +62,36 @@
         const bi = k => `${esc(L.en.ui[k])}<span class="bi">${esc(L.hi.ui[k])}</span>`;
         $('#t-title').innerHTML = `${esc(L.en.ui.title)} <span class="bi-inline">· ${esc(L.hi.ui.title)}</span>`;
         app.innerHTML = `<div class="card">
-            <label for="f-code">${bi('code')}</label><input type="text" id="f-code" inputmode="numeric" autocomplete="off" value="${esc(S.who.code || '')}">
+            <div id="f-code-wrap"${S.noCode ? ' hidden' : ''}><label for="f-code">${bi('code')}</label><input type="text" id="f-code" inputmode="numeric" autocomplete="off" value="${esc(S.who.code || '')}"></div>
+            <label class="nocode"><input type="checkbox" id="f-nocode"${S.noCode ? ' checked' : ''}> <span>${esc(NEWTXT.en.noCode)}<span class="bi">${esc(NEWTXT.hi.noCode)}</span></span></label>
             <label for="f-name">${bi('yourName')}</label><input type="text" id="f-name" autocomplete="name" value="${esc(S.who.name || '')}">
             <label for="f-mob">${bi('mobile')}</label><input type="tel" id="f-mob" inputmode="tel" autocomplete="tel" maxlength="14" value="${esc(S.who.mobile || '')}">
-          </div>${S.err ? `<div class="msg bad">${esc(L.en.ui[S.err] || L.en.ui.error)}<br>${esc(L.hi.ui[S.err] || L.hi.ui.error)}</div>` : ''}<button class="btn" id="f-next" type="button">${esc(L.en.ui.next)} / ${esc(L.hi.ui.next)}</button>`;
+          </div>${S.err ? `<div class="msg bad">${esc(L.en.ui[S.err] || L.en.ui.error)}<br>${esc(L.hi.ui[S.err] || L.hi.ui.error)}</div>` : ''}
+          ${S.canSkip ? `<div class="msg">${esc(NEWTXT.en.notReg)}<br>${esc(NEWTXT.hi.notReg)}</div><button class="btn btn-ghost" id="f-skip" type="button">${esc(NEWTXT.en.goOn)} / ${esc(NEWTXT.hi.goOn)}</button>` : ''}
+          <button class="btn" id="f-next" type="button">${esc(L.en.ui.next)} / ${esc(L.hi.ui.next)}</button>`;
+        const readWho = () => { S.who = { code: S.noCode ? '' : $('#f-code').value.trim(), name: $('#f-name').value.trim(), mobile: $('#f-mob').value.trim() }; };
+        // not registered (or no code at all): continue, the feedback waits for L&D to confirm the chauffeur
+        const goUnverified = async () => {
+          const mob = S.who.mobile.replace(/\D/g, '').slice(-10);
+          if (!S.who.name || mob.length !== 10) { S.err = 'needNameMob'; S.canSkip = false; return render(); }
+          if (!S.who.code) S.who.code = 'NEW-' + mob;
+          S.unv = true; S.canSkip = false; S.err = ''; S.me = { name: S.who.name.toUpperCase(), location: '' };
+          try { if (!S.opts) S.opts = await call({ action: 'fbOptions' }); } catch (e) { S.err = 'error'; return render(); }
+          S.step = 'lang'; S.allLangs = false; render(); window.scrollTo(0, 0);
+        };
+        $('#f-nocode').onchange = e => { readWho(); S.noCode = e.target.checked; S.canSkip = false; S.err = ''; render(); };
+        if ($('#f-skip')) $('#f-skip').onclick = () => { readWho(); goUnverified(); };
         $('#f-next').onclick = async () => {
-          S.who = { code: $('#f-code').value.trim(), name: $('#f-name').value.trim(), mobile: $('#f-mob').value.trim() };
-          if (!S.who.code || !S.who.name || !S.who.mobile) { S.err = 'notFound'; return render(); }
+          readWho(); S.unv = false;
+          if (S.noCode) return goUnverified();
+          if (!S.who.code || !S.who.name || !S.who.mobile) { S.err = 'notFound'; S.canSkip = false; return render(); }
           const btn = $('#f-next'); btn.disabled = true; btn.textContent = '…';
           try {
             const r = await call({ action: 'fbCheck', code: S.who.code, name: S.who.name, mobile: S.who.mobile });
-            S.me = r; S.err = ''; S.step = 'lang'; S.allLangs = false;
+            S.me = r; S.err = ''; S.canSkip = false; S.step = 'lang'; S.allLangs = false;
             if (!S.opts) S.opts = await call({ action: 'fbOptions' });
             render(); window.scrollTo(0, 0);
-          } catch (err) { S.err = err.message === 'wrongCode' ? 'notFound' : err.message; render(); }
+          } catch (err) { S.canSkip = err.message === 'wrongCode'; S.err = err.message === 'wrongCode' ? 'notFound' : err.message; render(); }
         };
         return;
       }
@@ -105,7 +127,7 @@
         if (!S.who.trainer || !S.who.module || S.q.filter(Boolean).length !== T().q.length) { S.err = 'answerAll'; return render(); }
         const btn = $('#send'); btn.disabled = true; btn.textContent = '…';
         try {
-          await call({ action: 'fbSubmitCommon', code: S.who.code, name: S.who.name, mobile: S.who.mobile, trainer: S.who.trainer, module: S.who.module, q: S.q });
+          await call({ action: 'fbSubmitCommon', code: S.who.code, name: S.who.name, mobile: S.who.mobile, trainer: S.who.trainer, module: S.who.module, q: S.q, unverified: !!S.unv });
           S.step = 'thanks'; render(); window.scrollTo(0, 0);
         } catch (err) { S.err = err.message === 'wrongCode' ? 'notFound' : err.message; render(); }
       };

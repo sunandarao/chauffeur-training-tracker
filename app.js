@@ -1782,7 +1782,7 @@
     const incomplete = M.chList.filter(c => c.status === 'Added from CCR');
     $('#main').innerHTML = `
       <div class="view-head"><div><h1>Admin</h1><p class="muted">Users, modules, chauffeur records and settings. Changes save straight to the Google Sheet.</p></div></div>
-      <nav class="subnav" aria-label="Admin sections">${[['ad-users', 'Users'], ['ad-sync', 'Sheet sync'], ['ad-master', 'Weekly master'], ['ad-import', 'Import feedback'], ['ad-codes', 'Fix codes'], ['ad-chauffeur', 'Add chauffeur'], ['ad-modules', 'Modules'], ['ad-fy', 'Financial year']].concat(isSuper() ? [['ad-log', 'Access log']] : [])
+      <nav class="subnav" aria-label="Admin sections">${[['ad-users', 'Users'], ['ad-sync', 'Sheet sync'], ['ad-master', 'Weekly master'], ['ad-import', 'Import feedback'], ['ad-inbox', 'Unregistered feedback'], ['ad-codes', 'Fix codes'], ['ad-chauffeur', 'Add chauffeur'], ['ad-modules', 'Modules'], ['ad-fy', 'Financial year']].concat(isSuper() ? [['ad-log', 'Access log']] : [])
         .map(([id, t]) => `<button type="button" data-jump="${id}">${t}</button>`).join('')}</nav>
       <section class="panel" id="ad-users"><div class="panel-head"><h2>Users</h2><p class="muted">L&amp;D team signs in with email + password</p></div><div class="loading">Loading users…</div></section>
       <section class="panel" id="ad-sync">
@@ -1799,6 +1799,7 @@
         <div class="actions"><button class="btn btn-primary btn-sm" id="if-pick" type="button">Choose file</button><input type="file" id="if-file" accept=".xlsx,.xls,.csv" hidden></div>
         <div id="if-out"></div>
       </section>
+      <section class="panel" id="ad-inbox"><div class="panel-head"><h2>Feedback from unregistered chauffeurs</h2><p class="muted">Chauffeurs whose code was not found (or who have no code) can still give feedback from the QR. Enter their real code: the ratings go onto their training record.</p></div><div id="ib-out" class="loading">Loading…</div></section>
       <div class="grid-2">
         <section class="panel" id="ad-codes"><div class="panel-head"><h2>Fix chauffeur codes <span class="pill ${noid.length ? 'bad' : 'good'}">${noid.length} temporary</span></h2></div>
           <p class="muted" style="margin-top:0">Replaces a code everywhere (attendance included). If the new code already exists, the two records are merged.</p>
@@ -1841,6 +1842,7 @@
 
     const done = async msg => { await load(true); render(); toast(msg); };
     if ($('#lg-load')) $('#lg-load').onclick = () => showAccessLog();
+    showInbox();
     $$('[data-jump]').forEach(b => b.onclick = () => { const el = document.getElementById(b.dataset.jump); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); });
 
     // Feedback import: preview against the live data, then write (optionally clearing all ratings first)
@@ -2171,6 +2173,34 @@
   }
 
   /* ---------------------------------------------------------------- Excel export */
+  async function showInbox() {
+    const out = $('#ib-out'); if (!out) return;
+    let res;
+    try { res = await api('listInbox', {}); }
+    catch (err) { out.className = ''; out.innerHTML = err.message === 'AUTH' ? '' : `<p class="form-error">${esc(err.message)}</p>`; return; }
+    out.className = '';
+    if (!res.items.length) { out.innerHTML = '<p class="ok-box" style="margin:0">Nothing waiting. All feedback is matched to a chauffeur.</p>'; return; }
+    out.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Received</th><th>Code given</th><th>Name</th><th>Mobile</th><th>L&amp;D</th><th>Module</th><th>Real code</th><th></th></tr></thead><tbody>
+      ${res.items.map(r => `<tr><td>${esc(dShort(r.received))}</td><td>${/^NEW-/i.test(r.code) ? '<span class="pill warn">no code</span>' : esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.mobile)}</td><td>${esc(r.trainer)}</td><td>${esc(r.module)}</td>
+        <td><input data-ibcode="${r.row}" inputmode="numeric" style="width:110px" value="${/^NEW-/i.test(r.code) ? '' : esc(r.code)}"></td>
+        <td style="white-space:nowrap"><button class="btn btn-sm btn-primary" data-ibok="${r.row}" type="button">Save</button> <button class="btn btn-sm" data-ibno="${r.row}" type="button">Reject</button></td></tr>`).join('')}
+      </tbody></table></div><p class="note">If the chauffeur is not in the master yet, add them first in <b>Add chauffeur</b> below, then save the code here.</p>`;
+    const busy = (b, on) => { b.disabled = on; };
+    $$('[data-ibok]').forEach(b => b.onclick = async () => {
+      const code = $(`[data-ibcode="${b.dataset.ibok}"]`).value.trim();
+      if (!code) return toast('Enter the chauffeur code first');
+      busy(b, true);
+      try { const r = await api('assignInbox', { row: b.dataset.ibok, code });
+        toast(r.status === 'Matched' ? 'Saved: ratings added to the training record' : r.status === 'Duplicate' ? 'That training already has feedback; kept as duplicate' : 'Saved: ratings will be added when the session is recorded');
+        if (r.status === 'Matched') await load(true); showInbox();
+      } catch (err) { busy(b, false); toast(/Unknown action/.test(err.message) ? 'Update the Apps Script first, then refresh.' : err.message); }
+    });
+    $$('[data-ibno]').forEach(b => b.onclick = async () => {
+      if (!confirm('Reject this feedback? It will not be counted.')) return;
+      busy(b, true);
+      try { await api('dismissInbox', { row: b.dataset.ibno }); toast('Rejected'); showInbox(); } catch (err) { busy(b, false); toast(err.message); }
+    });
+  }
   async function showAccessLog() {
     const out = $('#lg-out'), msg = $('#lg-msg'); msg.textContent = 'Loading…';
     let res;

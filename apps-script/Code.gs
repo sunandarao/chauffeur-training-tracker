@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-07-log';
+var CODE_VERSION = '2026-11-14-fbnew';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -81,6 +81,7 @@ function act_(action, me, p) {
     case 'listInbox': admin_(me); return listInbox_();
     case 'importFeedback': admin_(me); return withLock_(function () { return importFeedback_(p); });
     case 'dismissInbox': admin_(me); return withLock_(function () { return dismissInbox_(p); });
+    case 'assignInbox': admin_(me); return withLock_(function () { return assignInbox_(p); });
     case 'rebuildMasterView': admin_(me); return withLock_(function () { return rebuildMasterView_(); });
     case 'saveSettings': admin_(me); return withLock_(function () { return saveSettings_(p); });
     case 'saveKra': admin_(me); return withLock_(function () { return saveKra_(p); });
@@ -508,10 +509,59 @@ function fbUnverified_(p) {
   var q = asked_(p.q);
   if (!code || !name || !tr || !mod || !q) throw new Error('FB_INCOMPLETE');
   fbLimit_('fbu_' + code, 3, 86400);
+  // not in the master, but the L&D person may already have recorded them under this code (Not in Master)
+  var m = fbAttach_(code, tr, mod, q, new Date());
+  if (m === 'matched') return { ok: true, name: name, matched: true };
+  if (m === 'rated') throw new Error('FB_DONE');
   var sh = inbox_();
   if (sh.getLastColumn() < INBOX_COLS.length) sh.getRange(1, 1, 1, INBOX_COLS.length).setValues([INBOX_COLS]);
   sh.appendRow([new Date(), codeCell_(code), name, tr, mod].concat(q, ['Unverified', '', digits_(p.mobile)]));
   return { ok: true, name: name, matched: false, unverified: true };
+}
+
+/** Puts ratings on an unrated attendance row for code + L&D + module held up to FB_MATCH_DAYS before `around`.
+    Returns 'matched', 'rated' (already has feedback) or '' (no such session). */
+function fbAttach_(code, tr, mod, q, around) {
+  var at = table_(SH.AT);
+  var cD = col_(at, 'Date'), cC = col_(at, 'Code'), cM = col_(at, 'Module'), cT = col_(at, 'Trainer');
+  var Q = qHeaders_().map(function (h) { return col_(at, h); });
+  var b = around instanceof Date && !isNaN(around.getTime()) ? around : new Date();
+  var base = toDate_(iso_(b)) || new Date();
+  var best = -1, bestGap = 99, rated = false;
+  at.rows.forEach(function (r, i) {
+    if (code_(r[cC]) !== code) return;
+    if (String(r[cM]).trim().toLowerCase() !== String(mod).toLowerCase() || String(r[cT]).trim().toLowerCase() !== String(tr).toLowerCase()) return;
+    var d = toDate_(iso_(r[cD])); if (!d) return;
+    var gap = (base - d) / 864e5;
+    if (gap < -1 || gap > FB_MATCH_DAYS) return;
+    if (Q.some(function (k) { return rating_(r[k]) !== ''; })) { rated = true; return; }
+    if (Math.abs(gap) < bestGap) { bestGap = Math.abs(gap); best = i; }
+  });
+  if (best >= 0) { Q.forEach(function (k, j) { at.sh.getRange(best + 2, k + 1).setValue(q[j]); }); return 'matched'; }
+  return rated ? 'rated' : '';
+}
+
+/** Admin: give unverified feedback the chauffeur's real code. It goes onto their attendance, or waits until the session is saved. */
+function assignInbox_(p) {
+  var sh = inbox_(), row = Number(p.row);
+  if (!(row >= 2) || row > sh.getLastRow()) throw new Error('Row not found.');
+  var w = Math.max(sh.getLastColumn(), INBOX_COLS.length);
+  var v = sh.getRange(row, 1, 1, w).getValues()[0];
+  if (String(v[13]) !== 'Unverified') throw new Error('This feedback is no longer waiting.');
+  var code = code_(p.code);
+  if (!code) throw new Error('Enter the chauffeur code.');
+  var ch = table_(SH.CH), cc = col_(ch, 'Code'), cn = col_(ch, 'Name'), name = '';
+  ch.rows.forEach(function (r) { if (!name && code_(r[cc]) === code) name = String(r[cn]).trim(); });
+  var at = table_(SH.AT), ac = col_(at, 'Code');
+  var inAtt = at.rows.some(function (r) { return code_(r[ac]) === code; });
+  if (!name && !inAtt) throw new Error('Code ' + code + ' is not in the master or in any training record. Add the chauffeur first (Admin → Add chauffeur), then try again.');
+  var q = v.slice(5, 5 + Q_COUNT).map(rating_);
+  var rec = v[0] instanceof Date ? v[0] : new Date(v[0]);
+  var m = fbAttach_(code, String(v[3]).trim(), String(v[4]).trim(), q, rec);
+  v[1] = codeCell_(code); if (name) v[2] = name;
+  v[13] = m === 'matched' ? 'Matched' : m === 'rated' ? 'Duplicate' : 'Pending';
+  sh.getRange(row, 1, 1, w).setValues([v]);
+  return { ok: true, status: v[13] };
 }
 
 /** Called while saving a session: fills ratings from pending inbox feedback for the same chauffeur + L&D + module. */
