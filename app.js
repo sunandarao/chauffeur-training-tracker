@@ -99,8 +99,12 @@
     const trainerOptions = Array.from(new Set(d.trainers.concat(['External Trainer']))).filter(Boolean).sort();
     const months = []; for (let i = 0; i < 12; i++) months.push(addMonths(fyStart, i));
     const types = Array.from(new Set(chList.map(c => c.type))).sort();
+    // Welcome Check results; each chauffeur keeps their first Pre and latest Post attempt
+    const assess = (d.assess || []).map(r => ({ date: r[0], stage: r[1], code: r[2], name: r[3], branch: r[4], score: r[5], outOf: r[6], inMaster: r[7], mobile: r[8] || '' }))
+      .sort((x, y) => x.date.localeCompare(y.date));
+    assess.forEach(x => { x.c = ch[x.code]; if (!x.c) return; if (x.stage === 'Pre' && !x.c.pre) x.c.pre = x; if (x.stage === 'Post') x.c.post = x; });
     const pending = (d.pending || []).map(r => ({ id: r[0], date: r[1], code: r[2], name: r[3], module: r[4], trainer: r[5], remarks: r[6], by: r[7] }));
-    return { d, fyStart, fyEnd, fyLabel, modules, modDur, ch, chList, scoped, att, fyAtt, locations, trainerNames, trainerOptions, months, extraCols, hasInc: incIdx.length > 0, types, pending };
+    return { d, fyStart, fyEnd, fyLabel, modules, modDur, ch, chList, scoped, att, fyAtt, locations, trainerNames, trainerOptions, months, extraCols, hasInc: incIdx.length > 0, types, pending, assess };
   }
 
   // Aggregates for a subset (filter function over chauffeurs / attendance)
@@ -1203,7 +1207,29 @@
   // 1) New joiners since the FY start: induction received, and how many days after joining.
   // 2) Topics: per location, how many chauffeurs did each module and who delivered it; per chauffeur, done and still to do.
   // One induction (any induction module), two deadlines: the branch within 7 days of joining, L&D at the latest within 30.
-  const INDUCTION_RE = /induction/i, BH_DAYS = 7, LD_DAYS = 30;
+  const INDUCTION_RE = /induction/i, BH_DAYS = 7, LD_DAYS = 30, QZ_PASS = 12;
+  const qzPill = x => (x ? `<span class="pill ${x.score >= QZ_PASS ? 'good' : x.score >= 8 ? 'warn' : 'bad'}" title="${esc(dShort(x.date))}">${x.score}/${x.outOf}</span>` : '<span class="muted">–</span>');
+  function quizQr(stage) {
+    const url = location.origin + '/quiz.html' + (stage === 'post' ? '#post' : '');
+    let svg = '', png = '';
+    try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 7, margin: 2, scalable: true }); png = q.createDataURL(12, 4); } catch (e) { svg = '<p class="note">QR code could not be drawn here; share the link instead.</p>'; }
+    const when = stage === 'post' ? 'after the induction' : 'before the induction starts';
+    const msg = `Welcome Check (10 minutes, ${when}): ${url}`;
+    openDrawer(`
+      <div class="drawer-head"><div><h1>Welcome Check QR</h1><p class="muted">${stage === 'post' ? 'Re-check after the induction' : 'Pre-assessment: show it before the induction starts'}</p></div><button class="btn" data-close type="button">Close</button></div>
+      <section class="panel" style="display:grid;gap:12px;justify-items:center;text-align:center">
+        <h2>Ask new joiners to scan this with their phone camera</h2>
+        <div class="qr-box">${svg}</div>
+        <p class="muted" style="margin:0">They enter their <b>code (if they have one), name, mobile, branch and date of joining</b>, then answer <b>15 questions</b> in English or Hindi. Their score shows on the phone and comes into the Focus tab.</p>
+        ${png ? `<a class="btn btn-sm" href="${png}" download="Welcome_Check_${stage === 'post' ? 'After' : 'Before'}_QR.png">Download QR (for printing)</a>` : ''}
+      </section>
+      <section class="panel" style="display:grid;gap:10px">
+        <div class="link-box"><code id="qz-url">${esc(url)}</code><button class="btn btn-sm" id="qz-copy" type="button">Copy link</button></div>
+        <div class="actions"><a class="btn" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Share on WhatsApp</a><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open form</a></div>
+        <p class="note" style="margin:0">Give 8–10 minutes, phones apart. Keep the printed answer sheet for anyone without a smartphone.</p>
+      </section>`);
+    $('#qz-copy').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch (e) { toast('Copy the link above'); } };
+  }
   function focusData(loc, activeOnly) {
     const M = S.M, fy = M.fyStart, today = todayIso();
     const chs = M.scoped.filter(c => (loc === 'All' || c.loc === loc) && (!activeOnly || isActive(c)));
@@ -1216,7 +1242,7 @@
       const ldSt = ld ? (d <= LD_DAYS ? 'ontime' : 'late') : since <= LD_DAYS ? 'due' : 'overdue';
       const bhSt = bh ? (dBh <= BH_DAYS ? 'ontime' : 'late') : since <= BH_DAYS ? 'due' : 'overdue';
       return { c, code: c.code, name: c.name, loc: c.loc, doj: c.doj, mobile: c.mobile, ind: ld, indDate: ld ? ld.date : '', by: ld ? ld.trainer : '', d, ldSt,
-        bh, bhDate: bh ? bh.date : '', bhBy: bh ? bh.trainer : '', dBh, bhSt, since, left: LD_DAYS - since };
+        bh, bhDate: bh ? bh.date : '', bhBy: bh ? bh.trainer : '', dBh, bhSt, since, left: LD_DAYS - since, pre: c.pre || null, post: c.post || null };
     });
     const mods = masterMods().map(m => m.name);
     return { chs, joiners, mods };
@@ -1286,16 +1312,45 @@
             { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) },
             { key: 'since', label: 'Days since', n: 1 },
             { key: 'left', label: 'Status', n: 1, fmt: r => (r.left < 0 ? `<span class="pill bad">overdue ${fmt(-r.left)}d</span>` : r.since <= BH_DAYS ? `<span class="pill neutral">branch: ${fmt(BH_DAYS - r.since)}d left</span>` : `<span class="pill warn">L&amp;D: ${fmt(r.left)}d left</span>`) },
+            { key: 'preS', label: 'Welcome Check', n: 1, fmt: r => qzPill(r.pre) },
             { key: 'mobile', label: 'Mobile', cls: 'mono' }
-          ], pendL, { sortKey: 'left', sortDir: 'asc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
+          ], pendL.map(j => Object.assign(j, { preS: j.pre ? j.pre.score : -1 })), { sortKey: 'left', sortDir: 'asc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
           ${showInd ? `<div><h3>Inducted <span class="pill good">${fmt(indL.length)}</span></h3>${table('fo-ind', [
             { key: 'loc', label: 'Location' }, { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.name)} <small class="muted">${esc(r.code)}</small>` },
             { key: 'doj', label: 'Joined', fmt: r => dShort(r.doj) }, { key: 'indDate', label: 'Inducted', fmt: r => dShort(r.indDate) },
             { key: 'd', label: 'Days', n: 1, fmt: r => `<span class="pill ${r.d <= BH_DAYS ? 'good' : r.d <= LD_DAYS ? 'warn' : 'bad'}">${r.d === 0 ? 'same day' : r.d}</span>` },
-            { key: 'by', label: 'By' }
-          ], indL, { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
+            { key: 'by', label: 'By' },
+            { key: 'preS', label: 'Pre', n: 1, title: 'Welcome Check before induction', fmt: r => qzPill(r.pre) },
+            { key: 'postS', label: 'Post', n: 1, title: 'Welcome Check after induction', fmt: r => qzPill(r.post) }
+          ], indL.map(j => Object.assign(j, { preS: j.pre ? j.pre.score : -1, postS: j.post ? j.post.score : -1 })), { sortKey: 'd', sortDir: 'desc', tall: true, rowAttr: r => `class="click" data-code="${esc(r.code)}"` })}</div>` : ''}
         </div>
         <p class="note">Joiners = chauffeurs with a date of joining from ${esc(dShort(M.fyStart))}. Induction = the first session of any induction module (Smart Chauffeur Induction, Saksham…), whoever delivered it. Green = within 7 days (branch), amber = 8–30 days (L&amp;D), red = after 30 days.</p></section>
+
+      ${(() => { // Welcome Check (pre-assessment before induction, optional re-check after)
+        const inLoc = x => f.loc === 'All' || (x.c ? x.c.loc : x.branch).toUpperCase() === f.loc.toUpperCase();
+        const all = M.assess.filter(inLoc), pre = all.filter(x => x.stage === 'Pre'), post = all.filter(x => x.stage === 'Post');
+        const passN = l => l.filter(x => x.score >= QZ_PASS).length, avgS = l => (l.length ? fmt(avg(l.map(x => x.score)), 1) : '–');
+        const preJ = joiners.filter(j => j.pre).length;
+        return `<section class="panel" id="fo-qz"><div class="panel-head"><h2>Welcome Check (pre-assessment)</h2>
+          <p class="muted">15 questions before the induction starts · pass mark ${QZ_PASS} / 15 · <button class="linkbtn" id="qz-qr" type="button" style="padding:0">Show QR (before induction)</button> · <button class="linkbtn" id="qz-qr2" type="button" style="padding:0">QR for after induction</button></p></div>
+          ${kpis([
+            { label: 'Taken (before)', value: fmt(pre.length), sub: f.loc === 'All' ? 'all branches' : f.loc },
+            { label: 'Average score', value: avgS(pre), sub: 'out of 15, before induction' },
+            { label: 'Passed', value: fmt(passN(pre)), sub: pct(passN(pre), pre.length, 0) + ` scored ${QZ_PASS}+`, cls: 'good' },
+            { label: 'New joiners checked', value: fmt(preJ), sub: pct(preJ, joiners.length, 0) + ' of new joiners' },
+            { label: 'After induction', value: fmt(post.length), sub: post.length ? 'average ' + avgS(post) + ' / 15' : 'no re-checks yet' }
+          ])}
+          <div style="margin-top:12px">${all.length ? table('fo-qzt', [
+            { key: 'date', label: 'Date', fmt: r => dShort(r.date) }, { key: 'stage', label: 'When', fmt: r => (r.stage === 'Pre' ? 'Before' : 'After') },
+            { key: 'name', label: 'Chauffeur', fmt: r => `${esc(r.c ? r.c.name : r.name)} <small class="muted">${/^NEW-/i.test(r.code) ? 'no code' : esc(r.code)}</small>` },
+            { key: 'branch', label: 'Branch', fmt: r => esc(r.c ? r.c.loc : r.branch) }, { key: 'doj', label: 'Joined', fmt: r => (r.c && r.c.doj ? dShort(r.c.doj) : '–') },
+            { key: 'score', label: 'Score', n: 1, fmt: r => qzPill(r) },
+            { key: 'ind', label: 'Induction', fmt: r => { const i = r.c && r.c.att.find(a => INDUCTION_RE.test(a.module)); return i ? `<span class="pill good">${esc(dShort(i.date))}</span>` : '<span class="muted">not yet</span>'; } },
+            { key: 'inMaster', label: 'In master', fmt: r => (r.c ? 'Yes' : '<span class="pill warn">No</span>') }
+          ], all.slice().reverse(), { sortKey: 'date', sortDir: 'desc', tall: true, rowAttr: r => (r.c ? `class="click" data-code="${esc(r.code)}"` : '') })
+          : '<p class="muted" style="margin:0">No Welcome Checks yet. Show the QR to the new joiners before the induction starts.</p>'}</div>
+          <p class="note">Results also go to the <b>Assessments</b> tab of the Google Sheet. Chauffeurs who are not in the master yet are shown as "No": once you add them with the same code, their score joins up.</p></section>`;
+      })()}
 
       <section class="panel"><div class="panel-head"><h2>2. Topics trained, location-wise</h2><p class="muted">Chauffeurs trained in each module (% of the location's chauffeurs) · ${esc(M.fyLabel)}</p></div>
         <div class="table-wrap tall"><table><thead><tr><th>Location</th><th class="n">Chauffeurs</th><th class="n">Trained (any)</th>${mods.map(m => `<th class="n" title="${esc(m)}">${esc(modShort(m))}</th>`).join('')}</tr></thead><tbody>
@@ -1321,6 +1376,7 @@
     if ($('#fo-clear')) $('#fo-clear').onclick = () => { f.band = ''; render(); };
     $$('#main tr[data-floc]').forEach(tr => tr.onclick = () => { f.loc = tr.dataset.floc; f.tloc = ''; render(); toLists(); });
     $('#fo-act').onchange = e => { f.act = e.target.checked; render(); };
+    $('#qz-qr').onclick = () => quizQr('pre'); $('#qz-qr2').onclick = () => quizQr('post');
     $('#fo-tloc').onchange = e => { f.tloc = e.target.value; render(); };
     $$('#main tr[data-tloc]').forEach(tr => tr.onclick = () => { f.tloc = tr.dataset.tloc; render(); setTimeout(() => { const el = $('#fo-tloc'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50); });
     $$('#main tr[data-code]').forEach(tr => tr.onclick = () => openChauffeur(tr.dataset.code));
@@ -1335,6 +1391,11 @@
         .concat(pend.sort((x, y) => x.left - y.left).map(j => [j.loc, j.code, j.name, j.mobile, j.doj, j.since, j.left < 0 ? `overdue ${-j.left} days` : j.since <= BH_DAYS ? `branch: ${BH_DAYS - j.since} days left` : `L&D: ${j.left} days left`])));
       add('Inducted', [['Location', 'Code', 'Chauffeur', 'Date of joining', 'Induction date', 'Days', `Within ${BH_DAYS} days (branch)`, `Within ${LD_DAYS} days (L&D)`, 'Inducted by']]
         .concat(ind.map(j => [j.loc, j.code, j.name, j.doj, j.indDate, j.d, j.d <= BH_DAYS ? 'Yes' : 'No', j.d <= LD_DAYS ? 'Yes' : 'No', j.by])));
+      add('Welcome Check', [['Date', 'When', 'Code', 'Chauffeur', 'Branch', 'Mobile', 'Date of joining', 'Score', 'Out of', 'Result', 'Induction date', 'In master']]
+        .concat(M.assess.filter(x => f.loc === 'All' || (x.c ? x.c.loc : x.branch).toUpperCase() === f.loc.toUpperCase()).map(x => {
+          const i = x.c && x.c.att.find(a => INDUCTION_RE.test(a.module));
+          return [x.date, x.stage === 'Pre' ? 'Before induction' : 'After induction', x.code, x.c ? x.c.name : x.name, x.c ? x.c.loc : x.branch, x.mobile, x.c ? x.c.doj : '', x.score, x.outOf, x.score >= QZ_PASS ? 'Pass' : 'Below pass mark', i ? i.date : '', x.c ? 'Yes' : 'No'];
+        })));
       add('Topics by location', [['Location', 'Chauffeurs', 'Trained (any)'].concat(mods)].concat(locs.map(l => [l, locN[l] || 0, (trained[l] || new Set()).size].concat(mods.map(m => (cell[l + '|' + m] || new Set()).size)))));
       add('Who delivered', [['Module', 'L&D', 'Chauffeurs trained']].concat(...mods.filter(m => trBy[m]).map(m => Object.entries(trBy[m]).map(([t, s]) => [m, t, s.size]))));
       add('Chauffeur topics', [['Location', 'Code', 'Chauffeur', 'Trainings'].concat(mods.map(m => m + ' (L&D · date)'), ['Still to do'])]

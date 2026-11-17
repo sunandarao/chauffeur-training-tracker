@@ -13,7 +13,7 @@
 
 var SH = { CH: 'Chauffeurs', AT: 'Attendance', MO: 'Modules', US: 'Users', SE: 'Settings', RG: 'Regions', FL: 'FeedbackLinks', FI: 'Feedback Inbox', NM: 'Not in Master' };
 var USER_COLS = ['Name', 'Email', 'Role', 'Active', 'Access', 'New Password', 'Password Hash', 'Salt', 'Link Key Hash'];
-var CODE_VERSION = '2026-11-14-fbnew';
+var CODE_VERSION = '2026-11-17-quiz';
 var TOKEN_DAYS = 7;
 var HASH_ROUNDS = 300;
 var Q_COUNT = 8;   // rating columns Q1-Q8 in the Attendance sheet
@@ -46,6 +46,8 @@ function route_(p) {
     if (action === 'otpLogin') return otpLogin_(p);
     if (action === 'resetConfirm') return withLock_(function () { return resetConfirm_(p); });
     if (action === 'fbOptions') return fbOptions_();
+    if (action === 'quizOptions') return quizOptions_();
+    if (action === 'quizSubmit') return withLock_(function () { return quizSubmit_(p); });
     if (action === 'fbCheck') return fbCheck_(p);
     if (action === 'fbSubmitCommon') return withLock_(function () { return fbSubmitCommon_(p); });
     if (action === 'fbSession') return fbSession_(p);
@@ -500,6 +502,62 @@ function fbSubmitCommon_(p) {
   }
   sh.appendRow([new Date(), codeCell_(c.code), c.name, tr, mod].concat(q, ['Pending', '']));
   return { ok: true, name: c.name, matched: false };
+}
+
+/* ------------------------------------------------------------------ Welcome Check (assessment before / after induction) */
+// 15 questions, A-D. The key stays here and is never sent to the phone. Pass mark 12 / 15.
+var QUIZ_KEY = [1, 3, 2, 0, 2, 0, 3, 1, 0, 2, 3, 1, 2, 0, 3]; // A=0 B=1 C=2 D=3 : 1-B 2-D 3-C 4-A 5-C 6-A 7-D 8-B 9-A 10-C 11-D 12-B 13-C 14-A 15-D
+var QUIZ_PASS = 12;
+var AS_NAME = 'Assessments';
+var AS_COLS = ['Submitted At', 'Stage', 'Code', 'Name', 'Branch', 'Mobile', 'DOJ', 'Score', 'Out Of', 'Result', 'In Master', 'Answers'];
+
+function assessSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(AS_NAME);
+  if (!sh) { sh = ss.insertSheet(AS_NAME); sh.getRange(1, 1, 1, AS_COLS.length).setValues([AS_COLS]); sh.setFrozenRows(1); }
+  return sh;
+}
+
+/** Public: branch list for the quiz form. */
+function quizOptions_() {
+  var ch = table_(SH.CH), cl = col_(ch, 'Location'), seen = {};
+  ch.rows.forEach(function (r) { var l = String(r[cl]).trim(); if (l) seen[l.toUpperCase()] = true; });
+  return { ok: true, branches: Object.keys(seen).sort() };
+}
+
+/** Public: score and save one Welcome Check. Chauffeurs not in the master are saved too ("In Master" = No). */
+function quizSubmit_(p) {
+  var stage = String(p.stage) === 'post' ? 'Post' : 'Pre';
+  var name = String(p.name || '').trim().toUpperCase().slice(0, 80), mob = digits_(p.mobile);
+  var branch = String(p.branch || '').trim().toUpperCase().slice(0, 60);
+  var doj = /^\d{4}-\d{2}-\d{2}$/.test(String(p.doj || '')) ? String(p.doj) : '';
+  if (!name || mob.length !== 10 || !branch) throw new Error('QZ_INCOMPLETE');
+  var a = Array.isArray(p.answers) ? p.answers.slice(0, QUIZ_KEY.length).map(Number) : [];
+  if (a.length !== QUIZ_KEY.length || a.some(function (v) { return !(v >= 0 && v <= 3 && Math.round(v) === v); })) throw new Error('QZ_INCOMPLETE');
+  fbLimit_('qz_' + mob, 6, 3600);
+  var code = code_(p.code), inMaster = 'No';
+  if (code) {
+    try { var c = fbVerify_({ code: code, name: name, mobile: mob }); code = c.code; name = c.name.toUpperCase(); inMaster = 'Yes'; }
+    catch (err) { if (String(err.message) === 'FB_BUSY') throw err; inMaster = 'Not verified'; }
+  } else code = 'NEW-' + mob;
+  var score = 0;
+  a.forEach(function (v, i) { if (v === QUIZ_KEY[i]) score++; });
+  var n = QUIZ_KEY.length, pass = score >= QUIZ_PASS;
+  assessSheet_().appendRow([new Date(), stage, codeCell_(code), name, branch, mob, doj, score, n, pass ? 'Pass' : 'Below pass mark', inMaster,
+    a.map(function (v) { return 'ABCD'.charAt(v); }).join(' ')]);
+  return { ok: true, name: name, score: score, outOf: n, pass: pass };
+}
+
+/** For the app: [date, stage, code, name, branch, score, outOf, inMaster, mobile], limited to the user's locations. */
+function assessRows_(sc, visible) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AS_NAME);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, AS_COLS.length).getValues().filter(function (v) {
+    var code = code_(v[2]);
+    return code && (!sc || visible[code] || sc[String(v[4]).trim().toUpperCase()]);
+  }).map(function (v) {
+    return [iso_(v[0]), String(v[1]), code_(v[2]), String(v[3]), String(v[4]), Number(v[7]) || 0, Number(v[8]) || QUIZ_KEY.length, String(v[10]), String(v[5])];
+  });
 }
 
 /** Feedback from someone not (yet) in the master: held as "Unverified" until the admin adds them. */
@@ -1096,6 +1154,7 @@ function data_(me) {
     attendance: attendance,
     kra: kra_(),
     sheets: sheetScans_(),
+    assess: assessRows_(sc, visible),
     serverTime: new Date().toISOString()
   };
 }
